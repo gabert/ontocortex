@@ -1,0 +1,22 @@
+# Config file with API keys and passwords
+config.ini
+
+# LLM-generated schema and seed data
+domains/*/_generated/
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+.venv/
+venv/
+
+# IDEs
+.idea/

@@ -1,0 +1,291 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insurance Business Rules
+# Covers: premium calculation · claim approval · eligibility
+# Policy types: auto · home · health
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# PREMIUM CALCULATION
+#
+# Final monthly premium = (coverage_amount × annual_base_rate × combined_factor) / 12
+# combined_factor = product of all applicable factors below
+# annual_base_rate comes from the policy_types table
+# ───────────────────────────────────────────────────────────────────────────────
+
+premium_calculation:
+
+  auto:
+    description: >
+      Auto premium is driven by driver age, vehicle age, vehicle type,
+      and recent claims history. Young and elderly drivers and high-performance
+      or unusual vehicle types carry higher risk.
+
+    factors:
+      driver_age:
+        description: Based on customer date_of_birth, calculated at policy start_date.
+        brackets:
+          - range: [16, 24]
+            multiplier: 1.50
+            note: Inexperienced drivers — highest risk bracket
+          - range: [25, 34]
+            multiplier: 1.10
+          - range: [35, 54]
+            multiplier: 1.00
+            note: Baseline
+          - range: [55, 69]
+            multiplier: 1.15
+          - range: [70, 999]
+            multiplier: 1.40
+            note: Increased reaction-time risk
+
+      vehicle_age:
+        description: Current year minus vehicles.vehicle_year.
+        brackets:
+          - range: [0, 2]
+            multiplier: 1.20
+            note: New vehicles have higher replacement cost
+          - range: [3, 7]
+            multiplier: 1.00
+            note: Baseline
+          - range: [8, 14]
+            multiplier: 0.85
+            note: Lower market value reduces payout risk
+          - range: [15, 999]
+            multiplier: 0.70
+            note: Old vehicles — low market value
+
+      vehicle_type:
+        sedan:       1.00
+        suv:         1.10
+        truck:       1.15
+        van:         1.05
+        motorcycle:  1.60
+        note: Motorcycles carry significantly higher injury and total-loss risk
+
+      claims_history:
+        description: Count of approved or paid claims on ALL customer policies in the last 3 years.
+        brackets:
+          - count: 0
+            multiplier: 0.90
+            note: No-claims discount
+          - count: 1
+            multiplier: 1.00
+            note: Baseline
+          - count: 2
+            multiplier: 1.25
+          - count: 3
+            multiplier: 1.60
+          - count: "4+"
+            multiplier: 2.00
+            note: High-risk — consider eligibility review
+
+  home:
+    description: >
+      Home premium depends on the property's construction material, age, and
+      estimated value band. Older wood-frame properties in higher-value brackets
+      carry the greatest risk.
+
+    factors:
+      construction_type:
+        concrete: 0.85
+          note: Fire-resistant, lowest risk
+        brick:    1.00
+          note: Baseline
+        mixed:    1.20
+        wood:     1.50
+          note: Highest fire and weather damage risk
+
+      property_age:
+        description: Current year minus properties.year_built.
+        brackets:
+          - range: [0, 10]
+            multiplier: 0.90
+            note: Modern construction standards — lower risk
+          - range: [11, 25]
+            multiplier: 1.00
+            note: Baseline
+          - range: [26, 40]
+            multiplier: 1.20
+          - range: [41, 999]
+            multiplier: 1.50
+            note: Ageing infrastructure — elevated electrical and structural risk
+
+      property_value:
+        description: Based on properties.estimated_value.
+        brackets:
+          - range: [0, 200000]
+            multiplier: 0.90
+          - range: [200001, 400000]
+            multiplier: 1.00
+            note: Baseline
+          - range: [400001, 700000]
+            multiplier: 1.15
+          - range: [700001, 9999999]
+            multiplier: 1.30
+            note: High-value properties attract premium surcharge
+
+  health:
+    description: >
+      Health premium is driven by the policyholder's age, smoking status,
+      pre-existing conditions, and the number of dependents covered.
+      All factors compound multiplicatively.
+
+    factors:
+      customer_age:
+        description: Based on customer date_of_birth, calculated at policy start_date.
+        brackets:
+          - range: [18, 29]
+            multiplier: 0.80
+            note: Youngest cohort — lowest health risk
+          - range: [30, 39]
+            multiplier: 1.00
+            note: Baseline
+          - range: [40, 49]
+            multiplier: 1.30
+          - range: [50, 59]
+            multiplier: 1.70
+          - range: [60, 999]
+            multiplier: 2.20
+            note: Highest utilisation bracket
+
+      smoker:
+        true:  1.40
+        false: 1.00
+        note: Smoking surcharge applies regardless of policy type
+
+      pre_existing_conditions:
+        true:  1.35
+        false: 1.00
+        note: >
+          Pre-existing conditions include: diabetes, cardiovascular disease,
+          cancer history, chronic respiratory conditions, autoimmune disorders.
+          Declared at underwriting via customers.has_pre_existing_conditions.
+
+      dependents:
+        description: Count of rows in dependents table linked to this policy.
+        brackets:
+          - count: 0
+            multiplier: 1.00
+            note: Individual policy — baseline
+          - count: 1
+            multiplier: 1.40
+          - count: 2
+            multiplier: 1.70
+          - count: "3+"
+            multiplier: 2.00
+            note: Family policy cap — no further increase beyond 3 dependents
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLAIM APPROVAL
+#
+# Claims go through three gates in order:
+#   1. Auto-denial  — claim is rejected immediately if any condition matches
+#   2. Auto-approval — claim is approved immediately if all conditions pass
+#   3. Manual review — everything else requires a human underwriter
+# ───────────────────────────────────────────────────────────────────────────────
+
+claim_approval:
+
+  auto_deny_conditions:
+    - condition: claim_amount > policy.coverage_amount
+      reason: Claim exceeds maximum coverage limit
+    - condition: policy.status != 'active'
+      reason: Policy is not active at time of claim
+    - condition: claim_date < policy.start_date OR claim_date > policy.end_date
+      reason: Incident date falls outside policy period
+    - condition: >
+        claim_type = 'theft' AND vehicle not reported stolen
+        to police within 48 hours (verified by description)
+      reason: Late theft report — policy condition not met
+
+  auto_approve_conditions:
+    description: All of the following must be true for auto-approval.
+    - condition: claim_amount <= 0.10 * policy.coverage_amount
+      note: Small claim (up to 10% of coverage)
+    - condition: policy.status = 'active'
+    - condition: customer has no more than 1 approved/paid claim in last 12 months
+    - condition: no open fraud investigation on the customer
+
+  manual_review_triggers:
+    - claim_amount > 0.10 * policy.coverage_amount
+    - claim_type IN ('natural_disaster', 'fire')
+      note: Require site inspection report
+    - customer has 2 or more claims in the last 12 months
+    - claim description mentions pre-existing damage
+    - policy has any missed payment in the last 6 months
+      note: Payment status check via payments table
+
+  home_specific:
+    - condition: >
+        construction defect or pre-existing damage not disclosed
+        at underwriting
+      action: deny
+      note: >
+        Cross-check claim description against underwriting notes.
+        See Claim8 (CLM-2023-008) as a reference denial case.
+    - condition: claim_type = 'natural_disaster'
+      action: manual_review
+      note: Always requires third-party damage assessment
+
+  health_specific:
+    - condition: >
+        claimed treatment is for a condition listed as pre-existing
+        AND customer declared pre-existing conditions as false at underwriting
+      action: deny
+      reason: Material misrepresentation at underwriting
+    - condition: >
+        claimed treatment is for a condition listed as pre-existing
+        AND customers.has_pre_existing_conditions = true
+      action: approve_subject_to_excess
+      note: >
+        Pre-existing conditions are covered but subject to an annual
+        excess of $500 before the policy pays out
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ELIGIBILITY RULES
+#
+# These are checked before a new policy can be issued.
+# A customer who fails any hard rule cannot be offered that product.
+# Soft rules result in a surcharge (already reflected in premium factors above).
+# ───────────────────────────────────────────────────────────────────────────────
+
+eligibility:
+
+  auto:
+    hard_rules:
+      - Customer must be at least 18 years old at policy start date
+      - Customer must not have more than 3 at-fault accidents in the last 5 years
+      - Customer must not have an active DUI/DWI conviction in the last 7 years
+      - Vehicle must have a valid VIN
+      - Vehicle must not be declared a total loss (salvage title)
+    soft_rules:
+      - Drivers under 25 or over 70 receive age surcharge (see premium factors)
+      - Motorcycle policies require an additional safety-course declaration
+      - Vehicles over 20 years old are offered agreed-value coverage only
+
+  home:
+    hard_rules:
+      - Property must be owner-occupied or an investment property with valid tenancy
+      - Estimated property value must be between $50,000 and $2,000,000
+      - Property must pass a basic structural inspection (for coverage above $500,000)
+      - Property must not be located in a designated high-risk flood zone without
+        additional flood endorsement
+    soft_rules:
+      - Wood-frame properties over 40 years old receive a construction surcharge
+      - Properties in zip codes with above-average burglary rates receive a
+        geographic surcharge (tracked separately outside this system)
+
+  health:
+    hard_rules:
+      - Customer must be between 18 and 75 years old at policy start date
+      - Customer must not have an active health policy with this insurer
+        (no duplicate health coverage)
+    soft_rules:
+      - Smokers receive a smoking surcharge (see premium factors)
+      - Pre-existing conditions are covered after a 12-month waiting period
+        for conditions not declared at underwriting
+      - Dependents must be under 26 years old; children over 26 require
+        their own individual policy

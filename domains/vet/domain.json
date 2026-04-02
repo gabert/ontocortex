@@ -1,0 +1,14 @@
+{
+  "name": "Veterinary Clinic",
+  "description": "Small animal veterinary clinic -- dogs, cats, rabbits, exotic pets",
+  "database_name": "vet_clinic_demo",
+  "ontology": "vet_schema.ttl",
+  "business_rules": "vet_pricing.yaml",
+  "system_prompt": "vet_assistant_prompt.txt",
+  "generated": {
+    "ontology_compact": "vet_ontology_compact.owl",
+    "schema": "vet_schema.json",
+    "ddl": "vet_schema.sql",
+    "seed_data": "vet_seed_data.sql"
+  }
+}

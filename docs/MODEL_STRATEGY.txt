@@ -1,0 +1,67 @@
+MODEL ALLOCATION STRATEGY
+=========================
+
+Goal: maximize response quality while keeping cost and latency practical.
+Each component uses the cheapest model that reliably handles its complexity.
+
+
+1. SCHEMA DESIGN  (one-time, per domain)
+────────────────────────────────────────
+Model:    claude-opus-4-6
+Thinking: adaptive (let the model decide how much reasoning it needs)
+Tokens:   16 000 max (thinking + response combined)
+Why Opus: 3NF normalization from raw OWL requires deep multi-step reasoning —
+          FK placement, transitive dependency detection, enum extraction.
+          This runs once per domain so cost is negligible.
+
+File: agentcore/architect.py → _call_schema_llm()
+
+
+2. SEED DATA GENERATION  (one-time, per domain)
+────────────────────────────────────────────────
+Model:    claude-sonnet-4-20250514
+Thinking: none (standard call)
+Tokens:   16 384 max
+Why Sonnet: mechanical task — the schema is already designed, Sonnet just
+            fills rows with realistic values respecting constraints.
+
+File: agentcore/architect.py → _call_seed_llm()
+
+
+3. BUSINESS AGENT  (per user turn, many calls)
+──────────────────────────────────────────────
+Model:    claude-sonnet-4-20250514
+Thinking: none (standard tool-use loop)
+Tokens:   8 192 max per response
+Why Sonnet: the system prompt supplies schema + ontology + rules — all the
+            knowledge is already in context.  Sonnet follows instructions
+            well and is 5× cheaper / 3× faster than Opus.
+
+Prompt caching: enabled.  The system prompt is split into two blocks —
+  the stable domain context (schema + ontology + rules) is marked with
+  cache_control: {"type": "ephemeral"}, and the dynamic part (current
+  timestamp) is sent uncached.  Ephemeral cache lives for 5 minutes —
+  well within typical conversation cadence.  First turn pays a small
+  write premium; subsequent turns read from cache at 1/10 the price.
+
+File: agentcore/agent.py → _call_api()
+
+
+4. OPTIONAL: OPUS FALLBACK FOR FAILED WRITES
+─────────────────────────────────────────────
+Not implemented.  Future enhancement if Sonnet struggles with complex
+multi-table INSERT sequences or ambiguous business rule interpretation.
+
+Strategy: if execute_sql returns a validation/constraint error after N
+retries, escalate the same conversation turn to Opus for one attempt.
+This keeps Opus cost proportional to actual difficulty, not volume.
+
+
+COST SUMMARY
+─────────────
+                        Frequency       Model    Relative cost
+Schema design           once/domain     Opus     ~$0.50 per domain
+Seed data               once/domain     Sonnet   ~$0.10 per domain
+Business agent turn     every turn      Sonnet   ~$0.003–0.02 per turn (cached)
+
+Prices are estimates based on Anthropic published rates as of mid-2025.

@@ -1,0 +1,296 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dragon Hoard Accounting System
+#
+# A domain model for managing dragon hoards, lair operations, acquisition
+# history, and hero threat assessment.
+#
+# Standard OWL/Turtle — no custom annotations.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix drg:  <https://dragonhoard.example.org/ontology#> .
+
+<https://dragonhoard.example.org/ontology>
+    a owl:Ontology ;
+    rdfs:label "Dragon Hoard Accounting System" ;
+    rdfs:comment "Domain model for tracking dragon hoards, treasure items, lair operations, acquisitions, and hero incursion events." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLASSES
+# ───────────────────────────────────────────────────────────────────────────────
+
+drg:Dragon a owl:Class ;
+    rdfs:label "Dragon" ;
+    rdfs:comment "A dragon who owns and guards one or more hoards. Characterised by species, age class, and temperament." .
+
+drg:Lair a owl:Class ;
+    rdfs:label "Lair" ;
+    rdfs:comment "A physical location where a dragon resides and stores treasure. May be a cave, volcano, sunken ruin, or enchanted forest." .
+
+drg:Hoard a owl:Class ;
+    rdfs:label "Hoard" ;
+    rdfs:comment "A named collection of treasure items belonging to a dragon, stored in a lair. A dragon may maintain multiple hoards across different lairs." .
+
+drg:TreasureItem a owl:Class ;
+    rdfs:label "TreasureItem" ;
+    rdfs:comment "A single item of treasure in a hoard. May be a coin, gem, artifact, weapon, spellbook, or cursed object." .
+
+drg:Acquisition a owl:Class ;
+    rdfs:label "Acquisition" ;
+    rdfs:comment "A recorded event by which a dragon obtained one or more treasure items — raid, tribute, trade, or accidental discovery." .
+
+drg:Hero a owl:Class ;
+    rdfs:label "Hero" ;
+    rdfs:comment "A mortal who has attempted or is suspected of planning to raid a dragon's hoard. Threat level is tracked." .
+
+drg:Incursion a owl:Class ;
+    rdfs:label "Incursion" ;
+    rdfs:comment "A recorded attempt by a hero to enter and steal from a hoard. Outcome may be repelled, partial theft, full theft, or hero demise." .
+
+drg:Curse a owl:Class ;
+    rdfs:label "Curse" ;
+    rdfs:comment "A magical affliction attached to a specific treasure item that activates upon theft or unauthorised handling." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# VALUE SETS
+# ───────────────────────────────────────────────────────────────────────────────
+
+drg:DragonSpeciesValue a owl:Class ;
+    owl:oneOf ( drg:red drg:blue drg:green drg:black drg:white drg:gold drg:silver drg:shadow ) .
+
+drg:AgeClassValue a owl:Class ;
+    owl:oneOf ( drg:wyrmling drg:young drg:adult drg:ancient drg:wyrm ) .
+
+drg:TemperamentValue a owl:Class ;
+    owl:oneOf ( drg:hoarder drg:destroyer drg:schemer drg:slumberer drg:collector ) .
+
+drg:LairTypeValue a owl:Class ;
+    owl:oneOf ( drg:cave drg:volcano drg:sunken_ruin drg:enchanted_forest drg:mountain_peak drg:sea_trench ) .
+
+drg:ItemTypeValue a owl:Class ;
+    owl:oneOf ( drg:coin drg:gem drg:weapon drg:armor drg:spellbook drg:artifact drg:cursed_object drg:royal_regalia ) .
+
+drg:ItemConditionValue a owl:Class ;
+    owl:oneOf ( drg:pristine drg:good drg:worn drg:damaged drg:corrupted ) .
+
+drg:AcquisitionMethodValue a owl:Class ;
+    owl:oneOf ( drg:raid drg:tribute drg:trade drg:discovery drg:inheritance drg:theft_from_hero ) .
+
+drg:IncursionOutcomeValue a owl:Class ;
+    owl:oneOf ( drg:repelled drg:partial_theft drg:full_theft drg:hero_demise drg:negotiated_retreat ) .
+
+drg:HeroClassValue a owl:Class ;
+    owl:oneOf ( drg:warrior drg:rogue drg:mage drg:ranger drg:paladin drg:bard ) .
+
+drg:ThreatLevelValue a owl:Class ;
+    owl:oneOf ( drg:negligible drg:low drg:moderate drg:high drg:legendary ) .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES
+# ───────────────────────────────────────────────────────────────────────────────
+
+drg:dragonName a owl:DatatypeProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range xsd:string ;
+    rdfs:comment "True name of the dragon. Knowing it grants power — handle with care." .
+
+drg:species a owl:DatatypeProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Dragon species: red, blue, green, black, white, gold, silver, shadow." .
+
+drg:ageClass a owl:DatatypeProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Age classification: wyrmling, young, adult, ancient, wyrm." .
+
+drg:temperament a owl:DatatypeProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Behavioural disposition: hoarder, destroyer, schemer, slumberer, collector." .
+
+drg:estimatedAge a owl:DatatypeProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Estimated age in years. Highly uncertain for ancient wyrms." .
+
+drg:lairName a owl:DatatypeProperty ;
+    rdfs:domain drg:Lair ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Common name of the lair, e.g. 'The Ashen Caldera'." .
+
+drg:lairType a owl:DatatypeProperty ;
+    rdfs:domain drg:Lair ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Physical type: cave, volcano, sunken_ruin, enchanted_forest, mountain_peak, sea_trench." .
+
+drg:region a owl:DatatypeProperty ;
+    rdfs:domain drg:Lair ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Geographic region where the lair is located." .
+
+drg:isActive a owl:DatatypeProperty ;
+    rdfs:domain drg:Lair ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the lair is currently occupied by its dragon." .
+
+drg:hoardName a owl:DatatypeProperty ;
+    rdfs:domain drg:Hoard ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Named designation of the hoard, e.g. 'The Western Pile'." .
+
+drg:totalEstimatedValue a owl:DatatypeProperty ;
+    rdfs:domain drg:Hoard ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "Total estimated value of all items in the hoard in gold pieces." .
+
+drg:lastAuditDate a owl:DatatypeProperty ;
+    rdfs:domain drg:Hoard ;
+    rdfs:range xsd:date ;
+    rdfs:comment "Date of last inventory audit. Dragons are notoriously bad at bookkeeping." .
+
+drg:itemName a owl:DatatypeProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Name or description of the item, e.g. 'Vorpal Sword of the Fallen King'." .
+
+drg:itemType a owl:DatatypeProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Category: coin, gem, weapon, armor, spellbook, artifact, cursed_object, royal_regalia." .
+
+drg:estimatedValue a owl:DatatypeProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "Estimated value in gold pieces." .
+
+drg:isMagical a owl:DatatypeProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the item carries a detectable magical aura." .
+
+drg:condition a owl:DatatypeProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Physical condition: pristine, good, worn, damaged, corrupted." .
+
+drg:acquisitionDate a owl:DatatypeProperty ;
+    rdfs:domain drg:Acquisition ;
+    rdfs:range xsd:date ;
+    rdfs:comment "Date the acquisition event occurred." .
+
+drg:acquisitionMethod a owl:DatatypeProperty ;
+    rdfs:domain drg:Acquisition ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How the items were obtained: raid, tribute, trade, discovery, inheritance, theft_from_hero." .
+
+drg:sourceKingdom a owl:DatatypeProperty ;
+    rdfs:domain drg:Acquisition ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Kingdom, faction, or individual from whom the treasure was taken or received." .
+
+drg:heroName a owl:DatatypeProperty ;
+    rdfs:domain drg:Hero ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Name of the hero. May be an alias." .
+
+drg:heroClass a owl:DatatypeProperty ;
+    rdfs:domain drg:Hero ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Combat archetype: warrior, rogue, mage, ranger, paladin, bard." .
+
+drg:threatLevel a owl:DatatypeProperty ;
+    rdfs:domain drg:Hero ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Assessed threat to the hoard: negligible, low, moderate, high, legendary." .
+
+drg:isDeceased a owl:DatatypeProperty ;
+    rdfs:domain drg:Hero ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the hero is confirmed dead. Reduces threat level but not always reliably." .
+
+drg:incursionDate a owl:DatatypeProperty ;
+    rdfs:domain drg:Incursion ;
+    rdfs:range xsd:date ;
+    rdfs:comment "Date of the incursion attempt." .
+
+drg:outcome a owl:DatatypeProperty ;
+    rdfs:domain drg:Incursion ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Result: repelled, partial_theft, full_theft, hero_demise, negotiated_retreat." .
+
+drg:itemsStolen a owl:DatatypeProperty ;
+    rdfs:domain drg:Incursion ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Number of items successfully stolen during the incursion." .
+
+drg:damageToLair a owl:DatatypeProperty ;
+    rdfs:domain drg:Incursion ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Description of any structural damage to the lair caused during the incursion." .
+
+drg:curseName a owl:DatatypeProperty ;
+    rdfs:domain drg:Curse ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Name of the curse, e.g. 'The Withering of Greed'." .
+
+drg:curseEffect a owl:DatatypeProperty ;
+    rdfs:domain drg:Curse ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Description of what the curse does to an unauthorised handler." .
+
+drg:isActive a owl:DatatypeProperty ;
+    rdfs:domain drg:Curse ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the curse is currently active or has been dispelled." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OBJECT PROPERTIES
+# ───────────────────────────────────────────────────────────────────────────────
+
+drg:occupies a owl:ObjectProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range drg:Lair ;
+    rdfs:comment "The lair a dragon currently occupies as primary residence." .
+
+drg:owns a owl:ObjectProperty ;
+    rdfs:domain drg:Dragon ;
+    rdfs:range drg:Hoard ;
+    rdfs:comment "A dragon owns one or more hoards." .
+
+drg:storedIn a owl:ObjectProperty ;
+    rdfs:domain drg:Hoard ;
+    rdfs:range drg:Lair ;
+    rdfs:comment "The lair in which this hoard is physically kept." .
+
+drg:contains a owl:ObjectProperty ;
+    rdfs:domain drg:Hoard ;
+    rdfs:range drg:TreasureItem ;
+    rdfs:comment "A hoard contains many treasure items." .
+
+drg:acquiredVia a owl:ObjectProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range drg:Acquisition ;
+    rdfs:comment "The acquisition event through which this item entered the hoard." .
+
+drg:targetedHoard a owl:ObjectProperty ;
+    rdfs:domain drg:Incursion ;
+    rdfs:range drg:Hoard ;
+    rdfs:comment "The hoard that was targeted during this incursion attempt." .
+
+drg:conductedBy a owl:ObjectProperty ;
+    rdfs:domain drg:Incursion ;
+    rdfs:range drg:Hero ;
+    rdfs:comment "The hero who led or conducted this incursion." .
+
+drg:hasCurse a owl:ObjectProperty ;
+    rdfs:domain drg:TreasureItem ;
+    rdfs:range drg:Curse ;
+    rdfs:comment "A curse attached to this treasure item. Not all items are cursed." .

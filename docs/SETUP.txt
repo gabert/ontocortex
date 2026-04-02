@@ -1,0 +1,200 @@
+SETUP GUIDE
+===========
+
+End-to-end: from checkout to running the interactive agent.
+
+
+PREREQUISITES
+-------------
+- Python 3.10+
+- Docker (for PostgreSQL) — or a local PostgreSQL 15+ instance
+- An Anthropic API key (https://console.anthropic.com/)
+
+
+STEP 1: Clone and install dependencies
+---------------------------------------
+git clone <repo-url>
+cd ai_insurance
+pip install -r requirements.txt
+
+
+STEP 2: Start PostgreSQL
+-------------------------
+docker-compose up -d
+docker-compose ps          # verify "insurance_postgres" is Up
+
+
+STEP 3: Create config.ini
+---------------------------
+Copy the template below into config.ini at the project root:
+
+    [anthropic]
+    api_key = sk-ant-...your-key-here...
+
+    [database]
+    dbname = postgres
+    user = postgres
+    password = postgres
+    host = localhost
+    port = 5432
+
+The dbname here is the admin database (used for CREATE DATABASE).
+Each domain declares its own database name in domain.json.
+
+
+STEP 4: Design the database schema (LLM-driven, one-time)
+-----------------------------------------------------------
+Each domain ships an OWL/Turtle ontology that describes its data model.
+This step sends the ontology to Claude, which acts as a database
+architect and returns a normalised logical schema (JSON) plus realistic
+seed data (SQL).
+
+    python scripts/design_schema.py insurance
+
+This creates:
+    domains/insurance/insurance_schema.json   — logical schema
+    domains/insurance/insurance_seed_data.sql  — test data
+
+And updates domains/insurance/domain.json to reference them.
+
+To design the vet clinic domain:
+
+    python scripts/design_schema.py vet
+
+You only need to run this once per domain.  Re-run it if the ontology
+changes or if you want the LLM to propose a fresh schema.
+
+
+STEP 5: Set up the database and run the agent
+-----------------------------------------------
+    python main.py insurance
+
+On first launch, the app detects that the domain database doesn't exist
+and installs it automatically:
+  1. Creates the database (e.g., insurance_demo)
+  2. Applies the schema from the designed JSON via SQLAlchemy
+  3. Loads seed data from the generated SQL
+
+Subsequent launches skip installation and go straight to the agent.
+
+To force a fresh install (drop + recreate):
+
+    python scripts/setup_database.py insurance
+    python main.py insurance
+
+Or use /reset inside the interactive session.
+
+
+STEP 6a: Run the Web UI (recommended)
+--------------------------------------
+    streamlit run streamlit_app.py
+
+Opens a browser at http://localhost:8501 with:
+  - Sidebar: domain selector, database status, reset button
+  - Left pane: customer conversation (chat interface)
+  - Right pane: under-the-hood view (SQL queries, tool calls, reasoning)
+
+The UI auto-installs the database on first domain load.
+
+
+STEP 6b: Run the CLI agent (alternative)
+------------------------------------------
+    python main.py insurance
+
+    You: Show me all customers
+    You: Calculate the premium for customer 1 with $500,000 coverage
+    You: Create a new policy for John Smith
+
+Interactive commands:
+    /list            List available domains
+    /load <domain>   Switch to another domain
+    /reset           Drop and recreate the current domain's database
+    /new             Clear conversation history (keep domain)
+    /help            Show available commands
+    /quit            Exit
+
+
+HOW IT WORKS
+------------
+The agent receives three layers of context in its system prompt:
+
+    1. Schema     — the logical data model (from <domain>_schema.json)
+                    Tells the agent what tables and columns exist.
+
+    2. Ontology   — the OWL domain model (from the .ttl file)
+                    Tells the agent what the data means.
+
+    3. Rules      — business rules (from the .yaml file)
+                    Tells the agent how to make decisions.
+
+Claude acts as the business logic layer: it reads the schema, understands
+the domain, applies rules, generates SQL, executes it against PostgreSQL
+via framework tools, and returns reasoned answers.
+
+
+ADDING A NEW DOMAIN
+--------------------
+1. Create domains/<name>/ with:
+     domain.json          — descriptor (name, db name, file pointers)
+     <name>_ontology.ttl  — OWL ontology
+     <name>_rules.yaml    — business rules
+     <name>_prompt.txt    — agent persona / system prompt fragment
+
+2. Generate the schema:
+     python scripts/design_schema.py <name>
+
+3. Run:
+     python main.py <name>
+
+
+ARCHITECTURE
+------------
+    ontology.ttl ──→ LLM architect ──→ <domain>_schema.json (logical)
+                                        │
+                                        ├──→ SQLAlchemy ──→ PostgreSQL tables
+                                        ├──→ schema description ──→ agent prompt
+                                        └──→ validation spec ──→ agent prompt
+
+    <domain>_seed_data.sql ──→ SQLAlchemy ──→ PostgreSQL rows
+
+
+FILE LAYOUT
+-----------
+    agentcore/
+        architect.py    LLM-driven schema + seed data generation
+        schema.py       Logical schema → SQLAlchemy tables + prompt rendering
+        setup.py        Database lifecycle (create, apply, seed)
+        agent.py        Business-logic agent (agentic loop)
+        domain.py       Domain config loader
+        database.py     Query execution (SQLAlchemy)
+        config.py       config.ini loader
+
+    domains/<name>/
+        domain.json              Descriptor
+        <name>_ontology.ttl      OWL ontology (source of truth)
+        <name>_schema.json       Generated logical schema (gitignored)
+        <name>_seed_data.sql     Generated test data (gitignored)
+        <name>_rules.yaml        Business rules
+        <name>_prompt.txt        Agent persona
+
+    scripts/
+        design_schema.py         CLI: generate schema + seed data
+        setup_database.py        CLI: create database + apply schema
+
+    main.py                      Interactive agent CLI
+    streamlit_app.py             Web UI (Streamlit)
+
+
+TROUBLESHOOTING
+---------------
+"No schema.json found"
+  → Run: python scripts/design_schema.py <domain>
+
+"Cannot connect to the database"
+  → Check docker-compose ps, verify PostgreSQL is running
+
+"API key is invalid"
+  → Update config.ini with your key from console.anthropic.com
+
+"Port 5432 already in use"
+  → Stop local PostgreSQL, or change port in docker-compose.yml + config.ini

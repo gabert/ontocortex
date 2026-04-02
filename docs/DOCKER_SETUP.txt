@@ -1,0 +1,105 @@
+DOCKER SETUP GUIDE
+==================
+
+Using Docker is the EASIEST way to get PostgreSQL running without installing it manually.
+
+PREREQUISITES
+-------------
+Install Docker Desktop:
+- Windows/Mac: https://www.docker.com/products/docker-desktop/
+- Linux: sudo apt-get install docker.io docker-compose
+
+
+OPTION 1: Using Docker Compose (Recommended)
+---------------------------------------------
+
+1. Start PostgreSQL:
+   
+   docker-compose up -d
+
+   This will:
+   - Download PostgreSQL image (first time only)
+   - Start PostgreSQL on port 5432
+   - Create persistent storage for your data
+
+2. Verify it's running:
+   
+   docker-compose ps
+
+   You should see "insurance_postgres" with status "Up"
+
+3. Your config.ini settings (already correct):
+
+   [database]
+   dbname = postgres
+   user = postgres
+   password = postgres
+   host = localhost
+   port = 5432
+
+   The dbname here is the admin database. Each domain creates its own
+   database automatically (e.g., insurance_demo, vet_clinic_demo).
+
+4. Run the app:
+
+   streamlit run streamlit_app.py       # Web UI (recommended)
+   python main.py insurance             # CLI alternative
+
+
+OPTION 2: Using Docker Run (Alternative)
+-----------------------------------------
+
+If you don't have docker-compose:
+
+docker run -d \
+  --name insurance_postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 \
+  -v insurance_db_data:/var/lib/postgresql/data \
+  postgres:15
+
+
+MANAGING THE DATABASE
+---------------------
+
+Stop the database:
+  docker-compose down
+
+Start the database:
+  docker-compose up -d
+
+Stop and delete all data (start fresh):
+  docker-compose down -v
+
+View logs:
+  docker-compose logs -f postgres
+
+Connect with psql (for debugging):
+  docker exec -it insurance_postgres psql -U postgres
+
+
+TROUBLESHOOTING
+---------------
+
+Problem: "Port 5432 already in use"
+Solution: You already have PostgreSQL running locally. Either:
+  - Use your existing PostgreSQL (skip Docker)
+  - Stop your local PostgreSQL service
+  - Change port in docker-compose.yml to 5433 and update config.ini
+
+Problem: "Cannot connect to Docker daemon"
+Solution: Make sure Docker Desktop is running
+
+Problem: "Permission denied"
+Solution (Linux): Add your user to docker group
+  sudo usermod -aG docker $USER
+  (then log out and back in)
+
+
+WHY USE DOCKER?
+---------------
+✓ No manual PostgreSQL installation
+✓ Works same on Windows, Mac, Linux
+✓ Isolated from other PostgreSQL installations
+✓ Easy to reset/clean up
+✓ Portable - same setup everywhere

@@ -1,0 +1,428 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insurance Domain Ontology
+# Covers: auto, home, and health insurance
+#
+# Standard OWL/Turtle — no custom annotations.
+# Schema decisions (FK placement, constraints, defaults) are inferred by the
+# LLM architect from the domain semantics.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix ins:  <https://insurance.example.org/ontology#> .
+
+<https://insurance.example.org/ontology>
+    a owl:Ontology ;
+    rdfs:label "Insurance Domain Ontology" ;
+    rdfs:comment "Domain model for an insurance management system covering auto, home, and health insurance." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLASSES
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:Customer a owl:Class ;
+    rdfs:label "Customer" ;
+    rdfs:comment "A person who holds one or more insurance policies." .
+
+ins:Agent a owl:Class ;
+    rdfs:label "Agent" ;
+    rdfs:comment "A licensed insurance broker who manages customer policies." .
+
+ins:PolicyType a owl:Class ;
+    rdfs:label "PolicyType" ;
+    rdfs:comment "A category of insurance product (auto, home, health) with associated base rates." .
+
+ins:Policy a owl:Class ;
+    rdfs:label "Policy" ;
+    rdfs:comment "An insurance contract between a customer and the insurer, managed by an agent." .
+
+ins:Vehicle a owl:Class ;
+    rdfs:label "Vehicle" ;
+    rdfs:comment "A vehicle insured under an auto policy. Linked to exactly one policy." .
+
+ins:Property a owl:Class ;
+    rdfs:label "Property" ;
+    rdfs:comment "A real estate asset insured under a home policy. Linked to exactly one policy." .
+
+ins:Dependent a owl:Class ;
+    rdfs:label "Dependent" ;
+    rdfs:comment "A family member or domestic partner covered under a health policy." .
+
+ins:Claim a owl:Class ;
+    rdfs:label "Claim" ;
+    rdfs:comment "A request for insurance compensation filed against a policy." .
+
+ins:Payment a owl:Class ;
+    rdfs:label "Payment" ;
+    rdfs:comment "A premium payment transaction recorded against a policy." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ALLOWED VALUE SETS
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:PolicyStatusValue a owl:Class ;
+    rdfs:label "PolicyStatusValue" ;
+    owl:oneOf ( ins:active ins:cancelled ins:expired ins:pending ) .
+
+ins:ClaimStatusValue a owl:Class ;
+    rdfs:label "ClaimStatusValue" ;
+    owl:oneOf ( ins:claim_pending ins:claim_approved ins:claim_denied ins:claim_paid ) .
+
+ins:PaymentStatusValue a owl:Class ;
+    rdfs:label "PaymentStatusValue" ;
+    owl:oneOf ( ins:payment_paid ins:payment_late ins:payment_missed ) .
+
+ins:VehicleTypeValue a owl:Class ;
+    rdfs:label "VehicleTypeValue" ;
+    owl:oneOf ( ins:sedan ins:suv ins:truck ins:motorcycle ins:van ) .
+
+ins:ConstructionTypeValue a owl:Class ;
+    rdfs:label "ConstructionTypeValue" ;
+    owl:oneOf ( ins:wood ins:brick ins:concrete ins:mixed ) .
+
+ins:DependentRelationshipValue a owl:Class ;
+    rdfs:label "DependentRelationshipValue" ;
+    owl:oneOf ( ins:spouse ins:child ins:domestic_partner ) .
+
+ins:ClaimTypeValue a owl:Class ;
+    rdfs:label "ClaimTypeValue" ;
+    owl:oneOf ( ins:accident ins:theft ins:natural_disaster ins:fire ins:medical ins:liability ) .
+
+ins:PaymentMethodValue a owl:Class ;
+    rdfs:label "PaymentMethodValue" ;
+    owl:oneOf ( ins:credit_card ins:bank_transfer ins:check ) .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OBJECT PROPERTIES  (relationships between classes)
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:hasPolicy a owl:ObjectProperty ;
+    rdfs:label "hasPolicy" ;
+    rdfs:comment "A customer owns one or more policies." ;
+    rdfs:domain ins:Customer ;
+    rdfs:range  ins:Policy .
+
+ins:managedBy a owl:ObjectProperty ;
+    rdfs:label "managedBy" ;
+    rdfs:comment "The agent responsible for administering this policy." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:Agent .
+
+ins:hasPolicyType a owl:ObjectProperty ;
+    rdfs:label "hasPolicyType" ;
+    rdfs:comment "The product category of this policy (auto, home, health)." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:PolicyType .
+
+ins:coversVehicle a owl:ObjectProperty ;
+    rdfs:label "coversVehicle" ;
+    rdfs:comment "The vehicle covered by this auto policy. One vehicle per auto policy." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:Vehicle .
+
+ins:coversProperty a owl:ObjectProperty ;
+    rdfs:label "coversProperty" ;
+    rdfs:comment "The property covered by this home policy. One property per home policy." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:Property .
+
+ins:hasDependent a owl:ObjectProperty ;
+    rdfs:label "hasDependent" ;
+    rdfs:comment "A covered family member under a health policy. A policy may have multiple dependents." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:Dependent .
+
+ins:hasClaim a owl:ObjectProperty ;
+    rdfs:label "hasClaim" ;
+    rdfs:comment "A claim filed against this policy." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:Claim .
+
+ins:hasPayment a owl:ObjectProperty ;
+    rdfs:label "hasPayment" ;
+    rdfs:comment "A premium payment made against this policy." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range  ins:Payment .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — shared across multiple classes
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:firstName a owl:DatatypeProperty ;
+    rdfs:label "firstName" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ins:Customer ins:Agent ins:Dependent ) ] ;
+    rdfs:range xsd:string .
+
+ins:lastName a owl:DatatypeProperty ;
+    rdfs:label "lastName" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ins:Customer ins:Agent ins:Dependent ) ] ;
+    rdfs:range xsd:string .
+
+ins:email a owl:DatatypeProperty ;
+    rdfs:label "email" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ins:Customer ins:Agent ) ] ;
+    rdfs:range xsd:string .
+
+ins:phone a owl:DatatypeProperty ;
+    rdfs:label "phone" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ins:Customer ins:Agent ) ] ;
+    rdfs:range xsd:string .
+
+ins:status a owl:DatatypeProperty ;
+    rdfs:label "status" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ins:Policy ins:Claim ins:Payment ) ] ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Customer
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:dateOfBirth a owl:DatatypeProperty ;
+    rdfs:label "dateOfBirth" ;
+    rdfs:domain ins:Customer ;
+    rdfs:range xsd:date .
+
+ins:zipCode a owl:DatatypeProperty ;
+    rdfs:label "zipCode" ;
+    rdfs:domain ins:Customer ;
+    rdfs:range xsd:string .
+
+ins:occupation a owl:DatatypeProperty ;
+    rdfs:label "occupation" ;
+    rdfs:domain ins:Customer ;
+    rdfs:range xsd:string .
+
+ins:isSmoker a owl:DatatypeProperty ;
+    rdfs:label "isSmoker" ;
+    rdfs:domain ins:Customer ;
+    rdfs:range xsd:boolean .
+
+ins:hasPreExistingConditions a owl:DatatypeProperty ;
+    rdfs:label "hasPreExistingConditions" ;
+    rdfs:domain ins:Customer ;
+    rdfs:range xsd:boolean .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Agent
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:licenseNumber a owl:DatatypeProperty ;
+    rdfs:label "licenseNumber" ;
+    rdfs:domain ins:Agent ;
+    rdfs:range xsd:string .
+
+ins:agencyName a owl:DatatypeProperty ;
+    rdfs:label "agencyName" ;
+    rdfs:domain ins:Agent ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — PolicyType
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:typeName a owl:DatatypeProperty ;
+    rdfs:label "typeName" ;
+    rdfs:comment "Product type identifier: auto, home, or health." ;
+    rdfs:domain ins:PolicyType ;
+    rdfs:range xsd:string .
+
+ins:baseRate a owl:DatatypeProperty ;
+    rdfs:label "baseRate" ;
+    rdfs:comment "Annual base rate as a decimal fraction of coverage amount." ;
+    rdfs:domain ins:PolicyType ;
+    rdfs:range xsd:decimal .
+
+ins:typeDescription a owl:DatatypeProperty ;
+    rdfs:label "typeDescription" ;
+    rdfs:domain ins:PolicyType ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Policy
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:policyNumber a owl:DatatypeProperty ;
+    rdfs:label "policyNumber" ;
+    rdfs:comment "Human-readable policy reference, e.g. POL-2024-00042." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range xsd:string .
+
+ins:startDate a owl:DatatypeProperty ;
+    rdfs:label "startDate" ;
+    rdfs:domain ins:Policy ;
+    rdfs:range xsd:date .
+
+ins:endDate a owl:DatatypeProperty ;
+    rdfs:label "endDate" ;
+    rdfs:domain ins:Policy ;
+    rdfs:range xsd:date .
+
+ins:coverageAmount a owl:DatatypeProperty ;
+    rdfs:label "coverageAmount" ;
+    rdfs:comment "Maximum payout amount for this policy." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range xsd:decimal .
+
+ins:monthlyPremium a owl:DatatypeProperty ;
+    rdfs:label "monthlyPremium" ;
+    rdfs:comment "Calculated monthly premium after all risk factors are applied." ;
+    rdfs:domain ins:Policy ;
+    rdfs:range xsd:decimal .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Vehicle
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:make a owl:DatatypeProperty ;
+    rdfs:label "make" ;
+    rdfs:comment "Vehicle manufacturer, e.g. Toyota." ;
+    rdfs:domain ins:Vehicle ;
+    rdfs:range xsd:string .
+
+ins:model a owl:DatatypeProperty ;
+    rdfs:label "model" ;
+    rdfs:comment "Vehicle model, e.g. Camry." ;
+    rdfs:domain ins:Vehicle ;
+    rdfs:range xsd:string .
+
+ins:vehicleYear a owl:DatatypeProperty ;
+    rdfs:label "vehicleYear" ;
+    rdfs:comment "Model year of the vehicle. Used in premium calculation." ;
+    rdfs:domain ins:Vehicle ;
+    rdfs:range xsd:integer .
+
+ins:vin a owl:DatatypeProperty ;
+    rdfs:label "vin" ;
+    rdfs:comment "Vehicle Identification Number." ;
+    rdfs:domain ins:Vehicle ;
+    rdfs:range xsd:string .
+
+ins:vehicleType a owl:DatatypeProperty ;
+    rdfs:label "vehicleType" ;
+    rdfs:comment "Body type: sedan, suv, truck, motorcycle, van." ;
+    rdfs:domain ins:Vehicle ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Property
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:streetAddress a owl:DatatypeProperty ;
+    rdfs:label "streetAddress" ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:string .
+
+ins:city a owl:DatatypeProperty ;
+    rdfs:label "city" ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:string .
+
+ins:propertyZipCode a owl:DatatypeProperty ;
+    rdfs:label "propertyZipCode" ;
+    rdfs:comment "Zip code of the insured property. May differ from customer zip code." ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:string .
+
+ins:yearBuilt a owl:DatatypeProperty ;
+    rdfs:label "yearBuilt" ;
+    rdfs:comment "Construction year. Older properties carry higher premiums." ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:integer .
+
+ins:constructionType a owl:DatatypeProperty ;
+    rdfs:label "constructionType" ;
+    rdfs:comment "Primary construction material: wood, brick, concrete, mixed." ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:string .
+
+ins:estimatedValue a owl:DatatypeProperty ;
+    rdfs:label "estimatedValue" ;
+    rdfs:comment "Current market value of the property. Basis for coverage amount." ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:decimal .
+
+ins:squareFootage a owl:DatatypeProperty ;
+    rdfs:label "squareFootage" ;
+    rdfs:domain ins:Property ;
+    rdfs:range xsd:integer .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Dependent
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:dependentDateOfBirth a owl:DatatypeProperty ;
+    rdfs:label "dependentDateOfBirth" ;
+    rdfs:domain ins:Dependent ;
+    rdfs:range xsd:date .
+
+ins:relationship a owl:DatatypeProperty ;
+    rdfs:label "relationship" ;
+    rdfs:comment "Relationship to policyholder: spouse, child, domestic_partner." ;
+    rdfs:domain ins:Dependent ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Claim
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:claimNumber a owl:DatatypeProperty ;
+    rdfs:label "claimNumber" ;
+    rdfs:comment "Human-readable claim reference, e.g. CLM-2024-00017." ;
+    rdfs:domain ins:Claim ;
+    rdfs:range xsd:string .
+
+ins:claimDate a owl:DatatypeProperty ;
+    rdfs:label "claimDate" ;
+    rdfs:domain ins:Claim ;
+    rdfs:range xsd:date .
+
+ins:claimAmount a owl:DatatypeProperty ;
+    rdfs:label "claimAmount" ;
+    rdfs:domain ins:Claim ;
+    rdfs:range xsd:decimal .
+
+ins:claimType a owl:DatatypeProperty ;
+    rdfs:label "claimType" ;
+    rdfs:comment "Nature of the claim: accident, theft, natural_disaster, fire, medical, liability." ;
+    rdfs:domain ins:Claim ;
+    rdfs:range xsd:string .
+
+ins:claimDescription a owl:DatatypeProperty ;
+    rdfs:label "claimDescription" ;
+    rdfs:domain ins:Claim ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Payment
+# ───────────────────────────────────────────────────────────────────────────────
+
+ins:paymentDate a owl:DatatypeProperty ;
+    rdfs:label "paymentDate" ;
+    rdfs:domain ins:Payment ;
+    rdfs:range xsd:date .
+
+ins:amount a owl:DatatypeProperty ;
+    rdfs:label "amount" ;
+    rdfs:domain ins:Payment ;
+    rdfs:range xsd:decimal .
+
+ins:paymentMethod a owl:DatatypeProperty ;
+    rdfs:label "paymentMethod" ;
+    rdfs:comment "How the payment was made: credit_card, bank_transfer, check." ;
+    rdfs:domain ins:Payment ;
+    rdfs:range xsd:string .

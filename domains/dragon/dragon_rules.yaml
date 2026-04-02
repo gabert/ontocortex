@@ -1,0 +1,20 @@
+hoard_valuation:
+  - Total estimated value of a hoard is the sum of all contained item estimated values.
+  - Cursed items must be flagged separately in valuation reports — their market value is considered zero for insurance purposes.
+  - Magical items are valued at 3x their base estimated value.
+
+threat_assessment:
+  - A hero who has successfully stolen items (partial_theft or full_theft outcome) is automatically escalated one threat level.
+  - A hero confirmed deceased (isDeceased = true) is downgraded to negligible threat.
+  - A hero of class 'legendary' cannot be downgraded below 'high'.
+  - More than two incursions by the same hero triggers a mandatory lair security review.
+
+acquisition_rules:
+  - Items acquired via tribute are exempt from the standard 10% registry tax.
+  - Items acquired via theft_from_hero must have an associated incursion record.
+  - Inheritance acquisitions require a certified Death Certificate of the previous hoard owner.
+
+lair_operations:
+  - A lair marked inactive cannot receive new hoard items.
+  - A dragon may not have more than one active primary lair at a time.
+  - Lairs of type sea_trench require a waterproofing surcharge on all stored spellbooks.

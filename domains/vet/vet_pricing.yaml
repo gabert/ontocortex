@@ -1,0 +1,188 @@
+# ===============================================================================
+# Veterinary Clinic Pricing & Business Rules
+# Covers: treatment pricing . discounts . appointment policies . payment terms
+# ===============================================================================
+
+
+# -------------------------------------------------------------------------------
+# TREATMENT PRICING
+#
+# Base prices by treatment type. Actual cost is stored per treatment record,
+# but these are the standard rates the agent should use when creating new
+# treatments or estimating costs.
+# -------------------------------------------------------------------------------
+
+treatment_pricing:
+
+  examination:
+    base_price: 45.00
+    description: General physical examination
+    notes: Standard for all species. Exotic pets (parrots, reptiles) may be 55 EUR.
+
+  vaccination:
+    base_price: 35.00
+    description: Single vaccine administration
+    notes: Includes Nobivac DHPPi+L4 (dogs), Purevax RCP (cats), Filavac (rabbits).
+
+  surgery_minor:
+    base_price: 250.00
+    description: Minor surgical procedure under sedation
+    notes: Includes foreign body removal, abscess drainage, small mass excision.
+
+  surgery_major:
+    base_price: 600.00
+    description: Major surgical procedure under general anesthesia
+    notes: Includes orthopedic repair, splenectomy, complex GI surgery.
+
+  dental_cleaning:
+    base_price: 120.00
+    description: Full dental scaling and polishing under sedation
+
+  dental_extraction:
+    base_price: 85.00
+    description: Single tooth extraction
+    notes: Per tooth. Multiple extractions may be discounted at vet discretion.
+
+  lab_blood_work:
+    base_price: 60.00
+    description: CBC and biochemistry panel
+
+  lab_urinalysis:
+    base_price: 40.00
+    description: Complete urinalysis with sediment exam
+
+  xray:
+    base_price: 80.00
+    description: Single radiograph view
+    notes: Two views are standard for most diagnostics (charge x2).
+
+  deworming:
+    base_price: 25.00
+    description: Antiparasitic treatment (oral or injectable)
+
+  grooming:
+    base_price: 40.00
+    description: Basic grooming — nail trim, ear cleaning, coat brushing
+
+  emergency_triage:
+    base_price: 95.00
+    description: Emergency intake assessment and stabilization
+    notes: Charged in addition to any follow-up treatments.
+
+
+# -------------------------------------------------------------------------------
+# EMERGENCY SURCHARGE
+# -------------------------------------------------------------------------------
+
+emergency_surcharge:
+  multiplier: 1.50
+  applies_to: All treatments during an emergency appointment (is_emergency = true)
+  notes: >
+    Emergency visits outside regular hours (Mon-Fri 8:00-18:00) carry a 50%
+    surcharge on all treatment costs. The surcharge is already factored into
+    individual treatment costs when recorded, so do NOT apply it again.
+
+
+# -------------------------------------------------------------------------------
+# DISCOUNT RULES
+#
+# Discounts are applied at the invoice level (not per treatment).
+# Only one discount applies per invoice — use whichever gives the larger amount.
+# -------------------------------------------------------------------------------
+
+discounts:
+
+  multi_pet:
+    percentage: 10
+    condition: Owner has 2 or more pets registered at the clinic
+    description: >
+      10% discount on the invoice subtotal when the owner has multiple pets.
+      Check the pets table — count pets linked to the same owner_id.
+
+  senior_pet:
+    percentage: 5
+    condition: Pet is 10 years or older at the time of the appointment
+    description: >
+      5% discount for senior pets. Calculate age from pets.date_of_birth
+      relative to appointments.appointment_date.
+
+  stacking: >
+    Discounts do NOT stack. If both multi-pet and senior-pet apply,
+    use the one that gives the larger discount amount.
+
+
+# -------------------------------------------------------------------------------
+# APPOINTMENT POLICIES
+# -------------------------------------------------------------------------------
+
+appointment_policies:
+
+  duration_defaults:
+    examination:      30
+    vaccination:      20
+    dental_cleaning:  60
+    surgery_minor:    90
+    surgery_major:    180
+    emergency_triage: 45
+    notes: >
+      Default durations in minutes. When scheduling, use these unless
+      the veterinarian requests otherwise.
+
+  cancellation:
+    notice_required_hours: 24
+    late_cancellation_fee: 20.00
+    notes: >
+      Cancellations with less than 24 hours notice incur a 20 EUR fee.
+      No-shows are also charged 20 EUR. Record as a separate invoice.
+
+  scheduling:
+    max_advance_days: 90
+    notes: Appointments can be scheduled up to 90 days in advance.
+
+
+# -------------------------------------------------------------------------------
+# VACCINATION SCHEDULE (recommended)
+# -------------------------------------------------------------------------------
+
+vaccination_schedule:
+
+  dogs:
+    - vaccine: "DHPPi (Distemper, Hepatitis, Parvo, Parainfluenza)"
+      first_dose: "8 weeks"
+      booster: "12 weeks, then annually"
+    - vaccine: "Leptospirosis (L4)"
+      first_dose: "8 weeks"
+      booster: "12 weeks, then annually"
+    - vaccine: "Rabies"
+      first_dose: "12 weeks"
+      booster: "Every 3 years"
+
+  cats:
+    - vaccine: "RCP (Rhinotracheitis, Calicivirus, Panleukopenia)"
+      first_dose: "8 weeks"
+      booster: "12 weeks, then annually"
+    - vaccine: "Rabies"
+      first_dose: "12 weeks"
+      booster: "Every 3 years"
+
+  rabbits:
+    - vaccine: "Myxomatosis + RHD (Filavac)"
+      first_dose: "10 weeks"
+      booster: "Annually"
+
+
+# -------------------------------------------------------------------------------
+# PAYMENT TERMS
+# -------------------------------------------------------------------------------
+
+payment_terms:
+  due_within_days: 14
+  overdue_after_days: 30
+  accepted_methods:
+    - cash
+    - credit_card
+    - bank_transfer
+  notes: >
+    Invoices are due within 14 days of the appointment. After 30 days,
+    status changes to 'overdue'. Emergency treatments must be paid
+    before discharge or within 7 days with prior arrangement.

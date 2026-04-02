@@ -1,0 +1,375 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Veterinary Clinic Domain Ontology
+# 8 entity types: Owner, Species, Pet, Veterinarian, MedicalRecord,
+#                 Appointment, Treatment, Invoice
+#
+# Standard OWL/Turtle — no custom annotations.
+# Schema decisions (FK placement, constraints, defaults) are inferred by the
+# LLM architect from the domain semantics.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix vet:  <https://vetclinic.example.org/ontology#> .
+
+<https://vetclinic.example.org/ontology>
+    a owl:Ontology ;
+    rdfs:label "Veterinary Clinic Ontology" ;
+    rdfs:comment "Domain model for a veterinary clinic covering appointments, treatments, medical history, and billing." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLASSES
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:Owner a owl:Class ;
+    rdfs:label "Owner" ;
+    rdfs:comment "A pet owner and client of the clinic." .
+
+vet:Species a owl:Class ;
+    rdfs:label "Species" ;
+    rdfs:comment "Animal species with typical weight ranges and life expectancy." .
+
+vet:Pet a owl:Class ;
+    rdfs:label "Pet" ;
+    rdfs:comment "An animal registered at the clinic, linked to an owner and a species." .
+
+vet:Veterinarian a owl:Class ;
+    rdfs:label "Veterinarian" ;
+    rdfs:comment "A licensed veterinarian employed at or affiliated with the clinic." .
+
+vet:MedicalRecord a owl:Class ;
+    rdfs:label "MedicalRecord" ;
+    rdfs:comment "A dated entry in a pet's medical history — conditions, allergies, observations." .
+
+vet:Appointment a owl:Class ;
+    rdfs:label "Appointment" ;
+    rdfs:comment "A scheduled or completed clinic visit for a pet with a specific veterinarian." .
+
+vet:Treatment a owl:Class ;
+    rdfs:label "Treatment" ;
+    rdfs:comment "A procedure or medication administered during an appointment." .
+
+vet:Invoice a owl:Class ;
+    rdfs:label "Invoice" ;
+    rdfs:comment "A billing record for an appointment, including discounts and payment status." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ALLOWED VALUE SETS
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:AppointmentStatusValue a owl:Class ;
+    rdfs:label "AppointmentStatusValue" ;
+    owl:oneOf ( vet:scheduled vet:in_progress vet:completed vet:cancelled vet:no_show ) .
+
+vet:PaymentStatusValue a owl:Class ;
+    rdfs:label "PaymentStatusValue" ;
+    owl:oneOf ( vet:pending vet:paid vet:overdue ) .
+
+vet:SpecializationValue a owl:Class ;
+    rdfs:label "SpecializationValue" ;
+    owl:oneOf ( vet:general vet:surgery vet:dentistry vet:dermatology vet:exotic vet:cardiology ) .
+
+vet:TreatmentTypeValue a owl:Class ;
+    rdfs:label "TreatmentTypeValue" ;
+    owl:oneOf ( vet:examination vet:vaccination vet:surgery_minor vet:surgery_major
+                vet:dental_cleaning vet:dental_extraction vet:lab_blood_work
+                vet:lab_urinalysis vet:grooming vet:emergency_triage vet:xray vet:deworming ) .
+
+vet:PaymentMethodValue a owl:Class ;
+    rdfs:label "PaymentMethodValue" ;
+    owl:oneOf ( vet:cash vet:credit_card vet:bank_transfer ) .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OBJECT PROPERTIES  (relationships between classes)
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:ownsPet a owl:ObjectProperty ;
+    rdfs:label "ownsPet" ;
+    rdfs:comment "An owner has one or more pets." ;
+    rdfs:domain vet:Owner ;
+    rdfs:range  vet:Pet .
+
+vet:isSpecies a owl:ObjectProperty ;
+    rdfs:label "isSpecies" ;
+    rdfs:comment "A pet belongs to a species." ;
+    rdfs:domain vet:Pet ;
+    rdfs:range  vet:Species .
+
+vet:hasMedicalRecord a owl:ObjectProperty ;
+    rdfs:label "hasMedicalRecord" ;
+    rdfs:comment "A pet has medical history entries." ;
+    rdfs:domain vet:Pet ;
+    rdfs:range  vet:MedicalRecord .
+
+vet:appointmentForPet a owl:ObjectProperty ;
+    rdfs:label "appointmentForPet" ;
+    rdfs:comment "An appointment is for a specific pet." ;
+    rdfs:domain vet:Pet ;
+    rdfs:range  vet:Appointment .
+
+vet:appointmentWithVet a owl:ObjectProperty ;
+    rdfs:label "appointmentWithVet" ;
+    rdfs:comment "An appointment is with a specific veterinarian." ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range  vet:Veterinarian .
+
+vet:hasTreatment a owl:ObjectProperty ;
+    rdfs:label "hasTreatment" ;
+    rdfs:comment "An appointment includes one or more treatments." ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range  vet:Treatment .
+
+vet:hasInvoice a owl:ObjectProperty ;
+    rdfs:label "hasInvoice" ;
+    rdfs:comment "An appointment has one invoice." ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range  vet:Invoice .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — shared
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:firstName a owl:DatatypeProperty ;
+    rdfs:label "firstName" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( vet:Owner vet:Veterinarian ) ] ;
+    rdfs:range xsd:string .
+
+vet:lastName a owl:DatatypeProperty ;
+    rdfs:label "lastName" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( vet:Owner vet:Veterinarian ) ] ;
+    rdfs:range xsd:string .
+
+vet:email a owl:DatatypeProperty ;
+    rdfs:label "email" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( vet:Owner vet:Veterinarian ) ] ;
+    rdfs:range xsd:string .
+
+vet:phone a owl:DatatypeProperty ;
+    rdfs:label "phone" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( vet:Owner vet:Veterinarian ) ] ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Owner
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:address a owl:DatatypeProperty ;
+    rdfs:label "address" ;
+    rdfs:domain vet:Owner ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Species
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:speciesName a owl:DatatypeProperty ;
+    rdfs:label "speciesName" ;
+    rdfs:domain vet:Species ;
+    rdfs:range xsd:string .
+
+vet:typicalWeightMinKg a owl:DatatypeProperty ;
+    rdfs:label "typicalWeightMinKg" ;
+    rdfs:domain vet:Species ;
+    rdfs:range xsd:decimal .
+
+vet:typicalWeightMaxKg a owl:DatatypeProperty ;
+    rdfs:label "typicalWeightMaxKg" ;
+    rdfs:domain vet:Species ;
+    rdfs:range xsd:decimal .
+
+vet:lifeExpectancyYears a owl:DatatypeProperty ;
+    rdfs:label "lifeExpectancyYears" ;
+    rdfs:domain vet:Species ;
+    rdfs:range xsd:integer .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Pet
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:petName a owl:DatatypeProperty ;
+    rdfs:label "petName" ;
+    rdfs:domain vet:Pet ;
+    rdfs:range xsd:string .
+
+vet:breed a owl:DatatypeProperty ;
+    rdfs:label "breed" ;
+    rdfs:domain vet:Pet ;
+    rdfs:range xsd:string .
+
+vet:weightKg a owl:DatatypeProperty ;
+    rdfs:label "weightKg" ;
+    rdfs:domain vet:Pet ;
+    rdfs:range xsd:decimal .
+
+vet:dateOfBirth a owl:DatatypeProperty ;
+    rdfs:label "dateOfBirth" ;
+    rdfs:domain vet:Pet ;
+    rdfs:range xsd:date .
+
+vet:isNeutered a owl:DatatypeProperty ;
+    rdfs:label "isNeutered" ;
+    rdfs:domain vet:Pet ;
+    rdfs:range xsd:boolean .
+
+vet:chipNumber a owl:DatatypeProperty ;
+    rdfs:label "chipNumber" ;
+    rdfs:comment "EU-standard 15-digit ISO microchip number." ;
+    rdfs:domain vet:Pet ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Veterinarian
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:licenseNumber a owl:DatatypeProperty ;
+    rdfs:label "licenseNumber" ;
+    rdfs:domain vet:Veterinarian ;
+    rdfs:range xsd:string .
+
+vet:specialization a owl:DatatypeProperty ;
+    rdfs:label "specialization" ;
+    rdfs:comment "Primary area of practice: general, surgery, dentistry, dermatology, exotic, cardiology." ;
+    rdfs:domain vet:Veterinarian ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — MedicalRecord
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:recordDate a owl:DatatypeProperty ;
+    rdfs:label "recordDate" ;
+    rdfs:domain vet:MedicalRecord ;
+    rdfs:range xsd:date .
+
+vet:condition a owl:DatatypeProperty ;
+    rdfs:label "condition" ;
+    rdfs:comment "Diagnosed condition, allergy, or observation." ;
+    rdfs:domain vet:MedicalRecord ;
+    rdfs:range xsd:string .
+
+vet:recordDescription a owl:DatatypeProperty ;
+    rdfs:label "recordDescription" ;
+    rdfs:domain vet:MedicalRecord ;
+    rdfs:range xsd:string .
+
+vet:isChronic a owl:DatatypeProperty ;
+    rdfs:label "isChronic" ;
+    rdfs:comment "Whether this is an ongoing/chronic condition vs a one-time observation." ;
+    rdfs:domain vet:MedicalRecord ;
+    rdfs:range xsd:boolean .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Appointment
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:appointmentDate a owl:DatatypeProperty ;
+    rdfs:label "appointmentDate" ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range xsd:dateTime .
+
+vet:durationMinutes a owl:DatatypeProperty ;
+    rdfs:label "durationMinutes" ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range xsd:integer .
+
+vet:appointmentStatus a owl:DatatypeProperty ;
+    rdfs:label "appointmentStatus" ;
+    rdfs:comment "Status: scheduled, in_progress, completed, cancelled, no_show." ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range xsd:string .
+
+vet:isEmergency a owl:DatatypeProperty ;
+    rdfs:label "isEmergency" ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range xsd:boolean .
+
+vet:reason a owl:DatatypeProperty ;
+    rdfs:label "reason" ;
+    rdfs:comment "Brief description of why the visit was scheduled." ;
+    rdfs:domain vet:Appointment ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Treatment
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:treatmentType a owl:DatatypeProperty ;
+    rdfs:label "treatmentType" ;
+    rdfs:comment "Type of procedure: examination, vaccination, surgery_minor, surgery_major, dental_cleaning, dental_extraction, lab_blood_work, lab_urinalysis, grooming, emergency_triage, xray, deworming." ;
+    rdfs:domain vet:Treatment ;
+    rdfs:range xsd:string .
+
+vet:medication a owl:DatatypeProperty ;
+    rdfs:label "medication" ;
+    rdfs:comment "Medication name if prescribed as part of this treatment. NULL for non-medication treatments." ;
+    rdfs:domain vet:Treatment ;
+    rdfs:range xsd:string .
+
+vet:dosage a owl:DatatypeProperty ;
+    rdfs:label "dosage" ;
+    rdfs:comment "Dosage description, e.g. '50mg twice daily for 7 days'." ;
+    rdfs:domain vet:Treatment ;
+    rdfs:range xsd:string .
+
+vet:treatmentNotes a owl:DatatypeProperty ;
+    rdfs:label "treatmentNotes" ;
+    rdfs:domain vet:Treatment ;
+    rdfs:range xsd:string .
+
+vet:cost a owl:DatatypeProperty ;
+    rdfs:label "cost" ;
+    rdfs:domain vet:Treatment ;
+    rdfs:range xsd:decimal .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Invoice
+# ───────────────────────────────────────────────────────────────────────────────
+
+vet:subtotal a owl:DatatypeProperty ;
+    rdfs:label "subtotal" ;
+    rdfs:comment "Sum of all treatment costs for this appointment." ;
+    rdfs:domain vet:Invoice ;
+    rdfs:range xsd:decimal .
+
+vet:discount a owl:DatatypeProperty ;
+    rdfs:label "discount" ;
+    rdfs:comment "Discount amount applied (multi-pet, senior pet, etc.)." ;
+    rdfs:domain vet:Invoice ;
+    rdfs:range xsd:decimal .
+
+vet:finalAmount a owl:DatatypeProperty ;
+    rdfs:label "finalAmount" ;
+    rdfs:comment "Amount due after discount: subtotal - discount." ;
+    rdfs:domain vet:Invoice ;
+    rdfs:range xsd:decimal .
+
+vet:paymentStatus a owl:DatatypeProperty ;
+    rdfs:label "paymentStatus" ;
+    rdfs:comment "Status: pending, paid, overdue." ;
+    rdfs:domain vet:Invoice ;
+    rdfs:range xsd:string .
+
+vet:paymentMethod a owl:DatatypeProperty ;
+    rdfs:label "paymentMethod" ;
+    rdfs:comment "How the invoice was paid: cash, credit_card, bank_transfer." ;
+    rdfs:domain vet:Invoice ;
+    rdfs:range xsd:string .
+
+vet:paymentDate a owl:DatatypeProperty ;
+    rdfs:label "paymentDate" ;
+    rdfs:domain vet:Invoice ;
+    rdfs:range xsd:date .

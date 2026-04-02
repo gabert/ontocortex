@@ -1,0 +1,20 @@
+# ---------------------------------------------------------------------------
+# PREFERRED: set your API key as an environment variable instead of here.
+#
+#   export ANTHROPIC_API_KEY=sk-ant-...     (Linux / macOS)
+#   set ANTHROPIC_API_KEY=sk-ant-...        (Windows CMD)
+#   $env:ANTHROPIC_API_KEY="sk-ant-..."     (Windows PowerShell)
+#
+# The value below is only read when the environment variable is not set.
+# Never commit a real key to version control.
+# ---------------------------------------------------------------------------
+
+[anthropic]
+api_key = sk-ant-...your-key-here...
+
+[database]
+dbname = postgres
+user = postgres
+password = postgres
+host = localhost
+port = 5432

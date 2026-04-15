@@ -1,0 +1,23 @@
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex:   <https://example.org/cycle#> .
+
+<https://example.org/cycle>
+    a owl:Ontology ;
+    rdfs:label "Cycle fixture" .
+
+ex:A a owl:Class ;
+    rdfs:label "A" ;
+    rdfs:comment "Class A in a 2-cycle with B." .
+
+ex:B a owl:Class ;
+    rdfs:label "B" ;
+    rdfs:comment "Class B in a 2-cycle with A." .
+
+ex:aToB a owl:ObjectProperty ;
+    rdfs:domain ex:A ;
+    rdfs:range  ex:B .
+
+ex:bToA a owl:ObjectProperty ;
+    rdfs:domain ex:B ;
+    rdfs:range  ex:A .

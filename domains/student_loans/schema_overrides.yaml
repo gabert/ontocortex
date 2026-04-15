@@ -1,0 +1,20 @@
+# Schema overrides for student_loans.
+#
+# Hand-written hints that resolve ambiguous judgment calls the
+# deterministic planner can't make from ontology semantics alone.
+# Consumed by agentcore/planner.py.
+
+# FK direction overrides.
+#
+# Default: FK lives on the domain (subject) side, pointing at the range.
+# That works for reference-style properties (hasBorrower, issuedBy) but
+# is wrong for composition-style `has*` where the range is a dependent
+# child record that should carry the FK back to the parent.
+#
+# Value 'domain' means "FK lives on the range side pointing at the domain".
+#
+# Keys may be written as bare local_name ("hasPayment"), qname
+# ("sl:hasPayment"), or full IRI — resolved in that order, most specific
+# wins. Use qname or IRI when two namespaces define the same local_name.
+fk_parent:
+  sl:hasPayment: domain   # payments are children of loans; FK sl_loan_id belongs on sl_payments

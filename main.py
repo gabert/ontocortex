@@ -2,7 +2,7 @@
 
 import sys
 
-from agentcore.agent import DomainAgent
+from agentcore.pipeline import AgentPipeline
 from agentcore.config import ConfigError, load_config
 from agentcore.domain import list_domains, load_domain
 from agentcore.setup import db_config_for_domain, database_ready, install_domain
@@ -73,7 +73,7 @@ def main() -> None:
             print(f"Database '{domain.database_name}' not found. Installing...")
             db_cfg = install_domain(config, domain)
         config.database = db_cfg
-        agent = DomainAgent(config, domain)
+        agent = AgentPipeline(config, domain)
         _print_banner(domain.name)
         print(f"Agent: Hello! I'm your {domain.name.lower()} assistant.\n"
               "       How can I help you today?\n")
@@ -136,7 +136,7 @@ def main() -> None:
                     db_cfg = install_domain(config, domain)
 
                 config.database = db_cfg
-                agent = DomainAgent(config, domain)
+                agent = AgentPipeline(config, domain)
                 _print_banner(domain.name)
                 print(f"Agent: Hello! I'm your {domain.name.lower()} assistant.\n"
                       "       How can I help you today?\n")
@@ -151,7 +151,7 @@ def main() -> None:
                 print(f"\nReinstalling {domain.name}...")
                 db_cfg = install_domain(config, domain)
                 config.database = db_cfg
-                agent = DomainAgent(config, domain)
+                agent = AgentPipeline(config, domain)
                 _print_banner(domain.name)
                 print(f"Agent: {domain.name} reinstalled. Fresh session ready.\n")
                 continue
@@ -176,8 +176,9 @@ def main() -> None:
                 print(f"\nAgent: {response}\n")
             except Exception as e:
                 # Remove the last user message so the conversation stays consistent
-                if agent.messages and agent.messages[-1]["role"] == "user":
-                    agent.messages.pop()
+                msgs = getattr(agent, 'messages', None) or getattr(agent.conversation, 'messages', [])
+                if msgs and msgs[-1]["role"] == "user":
+                    msgs.pop()
                 hint = _error_hint(e)
                 print(f"\nAgent: I'm sorry, something went wrong — {hint}\n"
                       f"       Please try again.\n")

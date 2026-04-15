@@ -102,18 +102,18 @@ drg:dragonName a owl:DatatypeProperty ;
 
 drg:species a owl:DatatypeProperty ;
     rdfs:domain drg:Dragon ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Dragon species: red, blue, green, black, white, gold, silver, shadow." .
+    rdfs:range drg:DragonSpeciesValue ;
+    rdfs:comment "Dragon species." .
 
 drg:ageClass a owl:DatatypeProperty ;
     rdfs:domain drg:Dragon ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Age classification: wyrmling, young, adult, ancient, wyrm." .
+    rdfs:range drg:AgeClassValue ;
+    rdfs:comment "Age classification." .
 
 drg:temperament a owl:DatatypeProperty ;
     rdfs:domain drg:Dragon ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Behavioural disposition: hoarder, destroyer, schemer, slumberer, collector." .
+    rdfs:range drg:TemperamentValue ;
+    rdfs:comment "Behavioural disposition." .
 
 drg:estimatedAge a owl:DatatypeProperty ;
     rdfs:domain drg:Dragon ;
@@ -127,8 +127,8 @@ drg:lairName a owl:DatatypeProperty ;
 
 drg:lairType a owl:DatatypeProperty ;
     rdfs:domain drg:Lair ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Physical type: cave, volcano, sunken_ruin, enchanted_forest, mountain_peak, sea_trench." .
+    rdfs:range drg:LairTypeValue ;
+    rdfs:comment "Physical type of the lair." .
 
 drg:region a owl:DatatypeProperty ;
     rdfs:domain drg:Lair ;
@@ -162,8 +162,8 @@ drg:itemName a owl:DatatypeProperty ;
 
 drg:itemType a owl:DatatypeProperty ;
     rdfs:domain drg:TreasureItem ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Category: coin, gem, weapon, armor, spellbook, artifact, cursed_object, royal_regalia." .
+    rdfs:range drg:ItemTypeValue ;
+    rdfs:comment "Category of the treasure item." .
 
 drg:estimatedValue a owl:DatatypeProperty ;
     rdfs:domain drg:TreasureItem ;
@@ -177,8 +177,8 @@ drg:isMagical a owl:DatatypeProperty ;
 
 drg:condition a owl:DatatypeProperty ;
     rdfs:domain drg:TreasureItem ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Physical condition: pristine, good, worn, damaged, corrupted." .
+    rdfs:range drg:ItemConditionValue ;
+    rdfs:comment "Physical condition of the treasure item." .
 
 drg:acquisitionDate a owl:DatatypeProperty ;
     rdfs:domain drg:Acquisition ;
@@ -187,8 +187,8 @@ drg:acquisitionDate a owl:DatatypeProperty ;
 
 drg:acquisitionMethod a owl:DatatypeProperty ;
     rdfs:domain drg:Acquisition ;
-    rdfs:range xsd:string ;
-    rdfs:comment "How the items were obtained: raid, tribute, trade, discovery, inheritance, theft_from_hero." .
+    rdfs:range drg:AcquisitionMethodValue ;
+    rdfs:comment "How the items were obtained." .
 
 drg:sourceKingdom a owl:DatatypeProperty ;
     rdfs:domain drg:Acquisition ;
@@ -202,13 +202,13 @@ drg:heroName a owl:DatatypeProperty ;
 
 drg:heroClass a owl:DatatypeProperty ;
     rdfs:domain drg:Hero ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Combat archetype: warrior, rogue, mage, ranger, paladin, bard." .
+    rdfs:range drg:HeroClassValue ;
+    rdfs:comment "Combat archetype of the hero." .
 
 drg:threatLevel a owl:DatatypeProperty ;
     rdfs:domain drg:Hero ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Assessed threat to the hoard: negligible, low, moderate, high, legendary." .
+    rdfs:range drg:ThreatLevelValue ;
+    rdfs:comment "Assessed threat to the hoard." .
 
 drg:isDeceased a owl:DatatypeProperty ;
     rdfs:domain drg:Hero ;
@@ -222,8 +222,8 @@ drg:incursionDate a owl:DatatypeProperty ;
 
 drg:outcome a owl:DatatypeProperty ;
     rdfs:domain drg:Incursion ;
-    rdfs:range xsd:string ;
-    rdfs:comment "Result: repelled, partial_theft, full_theft, hero_demise, negotiated_retreat." .
+    rdfs:range drg:IncursionOutcomeValue ;
+    rdfs:comment "Outcome of the incursion." .
 
 drg:itemsStolen a owl:DatatypeProperty ;
     rdfs:domain drg:Incursion ;
@@ -245,7 +245,7 @@ drg:curseEffect a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:comment "Description of what the curse does to an unauthorised handler." .
 
-drg:isActive a owl:DatatypeProperty ;
+drg:curseIsActive a owl:DatatypeProperty ;
     rdfs:domain drg:Curse ;
     rdfs:range xsd:boolean ;
     rdfs:comment "Whether the curse is currently active or has been dispelled." .

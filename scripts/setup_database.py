@@ -2,9 +2,9 @@
 CLI entry point for domain database setup.
 
 Usage:
-    python scripts/setup_database.py              # pick domain interactively
-    python scripts/setup_database.py insurance    # set up the insurance domain
-    python scripts/setup_database.py vet          # set up the vet clinic domain
+    python scripts/setup_database.py                  # pick domain interactively
+    python scripts/setup_database.py student_loans    # set up the student loans domain
+    python scripts/setup_database.py vet              # set up the vet clinic domain
 """
 
 import sys

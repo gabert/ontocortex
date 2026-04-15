@@ -1,0 +1,21 @@
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex:   <https://example.org/union#> .
+
+<https://example.org/union>
+    a owl:Ontology ;
+    rdfs:label "Union domain fixture" .
+
+ex:Customer a owl:Class ;
+    rdfs:comment "Customer entity." .
+
+ex:Vendor a owl:Class ;
+    rdfs:comment "Vendor entity." .
+
+ex:Invoice a owl:Class ;
+    rdfs:comment "Invoice issued by either a customer or a vendor." .
+
+# Union domain — planner should warn and drop this property.
+ex:issuedBy a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( ex:Customer ex:Vendor ) ] ;
+    rdfs:range  ex:Invoice .

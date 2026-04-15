@@ -7,7 +7,7 @@ Run with:
 import pandas as pd
 import streamlit as st
 
-from agentcore.agent import DomainAgent
+from agentcore.pipeline import AgentPipeline
 from agentcore.config import load_config
 from agentcore.domain import list_domains, load_domain
 from agentcore.setup import database_ready, db_config_for_domain, install_domain
@@ -58,7 +58,7 @@ def _load_domain(domain_key: str) -> None:
         st.toast(f"Database not found — installing {domain.name}…")
         db_cfg = install_domain(config, domain)
     config.database = db_cfg
-    st.session_state.agent = DomainAgent(config, domain, verbose=False)
+    st.session_state.agent = AgentPipeline(config, domain, verbose=False)
     st.session_state.domain_name = domain.name
     st.session_state.messages = []
     st.session_state.last_data = None
@@ -72,7 +72,7 @@ def _reset_domain(domain_key: str) -> None:
     domain = load_domain(domain_key, domains_dir)
     db_cfg = install_domain(config, domain)
     config.database = db_cfg
-    st.session_state.agent = DomainAgent(config, domain, verbose=False)
+    st.session_state.agent = AgentPipeline(config, domain, verbose=False)
     st.session_state.domain_name = domain.name
     st.session_state.messages = []
     st.session_state.last_data = None
@@ -85,8 +85,8 @@ def _reset_domain(domain_key: str) -> None:
 def _extract_last_data(query_log: list[dict]) -> list[dict] | None:
     """Return the last non-empty SELECT result from the query log."""
     for entry in reversed(query_log):
-        if entry.get("type") == "sql" and not entry.get("is_write"):
-            results = entry.get("results")
+        if entry.get("type") in ("sql", "sif") and not entry.get("is_write"):
+            results = entry.get("result") or entry.get("results")
             if isinstance(results, list) and results:
                 return results
     return None
@@ -237,8 +237,9 @@ with chat_col:
 
                 except Exception as e:
                     agent = st.session_state.agent
-                    if agent.messages and agent.messages[-1]["role"] == "user":
-                        agent.messages.pop()
+                    msgs = agent.conversation.messages
+                    if msgs and msgs[-1]["role"] == "user":
+                        msgs.pop()
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": f"Something went wrong — {e}. Please try again.",
@@ -288,37 +289,30 @@ with hood_container:
                     st.markdown(f"---\n**{entry['label']}**")
                     continue
 
-                # ── Tool call (non-SQL) ───────────────────────────────────────
-                if entry_type == "tool":
-                    st.markdown(f"**:violet[TOOL]** `{entry['name']}`")
-                    st.caption(entry.get("result", ""))
-
-                # ── SQL query ─────────────────────────────────────────────────
-                elif entry_type == "sql":
+                # ── SIF operation ─────────────────────────────────────────────
+                if entry_type == "sif":
                     is_write = entry.get("is_write", False)
-                    result   = entry.get("results")
-                    query    = entry.get("query", "")
+                    result   = entry.get("result")
+                    query    = entry.get("sql", "")
 
-                    # Validation errors (pre-flight blocked)
-                    if isinstance(result, list) and result and isinstance(result[0], dict) and result[0].get("error") == "validation":
-                        st.markdown("**:red[VALIDATION BLOCKED]**")
-                        st.code(query, language="sql")
-                        st.json(result)
-                    elif is_write:
+                    if is_write:
                         st.markdown("**:orange[WRITE]**")
-                        st.code(query, language="sql")
-                        if isinstance(result, dict):
-                            if result.get("error") == "constraint_violation":
-                                st.error(f"Constraint violation: {result}")
-                            else:
-                                st.caption(f"{result.get('rows_affected', 0)} row(s) affected")
                     else:
                         st.markdown("**:blue[READ]**")
-                        st.code(query, language="sql")
+                    st.code(query, language="sql")
+
                     if isinstance(result, list):
                         if result:
                             st.dataframe(pd.DataFrame(result), use_container_width=True, hide_index=True)
                         else:
                             st.caption("No rows returned.")
-                    elif isinstance(result, dict) and "error" in result:
-                        st.error(result)
+                    elif isinstance(result, dict):
+                        if "error" in result:
+                            st.error(result)
+                        else:
+                            st.caption(f"{result.get('rows_affected', 0)} row(s) affected")
+
+                # ── Action ───────────────────────────────────────────────────
+                elif entry_type == "action":
+                    st.markdown(f"**:violet[ACTION]** `{entry.get('action', '')}`")
+                    st.caption(str(entry.get("result", "")))

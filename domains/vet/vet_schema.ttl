@@ -238,9 +238,9 @@ vet:licenseNumber a owl:DatatypeProperty ;
 
 vet:specialization a owl:DatatypeProperty ;
     rdfs:label "specialization" ;
-    rdfs:comment "Primary area of practice: general, surgery, dentistry, dermatology, exotic, cardiology." ;
+    rdfs:comment "Primary area of practice." ;
     rdfs:domain vet:Veterinarian ;
-    rdfs:range xsd:string .
+    rdfs:range vet:SpecializationValue .
 
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -286,9 +286,9 @@ vet:durationMinutes a owl:DatatypeProperty ;
 
 vet:appointmentStatus a owl:DatatypeProperty ;
     rdfs:label "appointmentStatus" ;
-    rdfs:comment "Status: scheduled, in_progress, completed, cancelled, no_show." ;
+    rdfs:comment "Lifecycle status of the appointment." ;
     rdfs:domain vet:Appointment ;
-    rdfs:range xsd:string .
+    rdfs:range vet:AppointmentStatusValue .
 
 vet:isEmergency a owl:DatatypeProperty ;
     rdfs:label "isEmergency" ;
@@ -308,9 +308,9 @@ vet:reason a owl:DatatypeProperty ;
 
 vet:treatmentType a owl:DatatypeProperty ;
     rdfs:label "treatmentType" ;
-    rdfs:comment "Type of procedure: examination, vaccination, surgery_minor, surgery_major, dental_cleaning, dental_extraction, lab_blood_work, lab_urinalysis, grooming, emergency_triage, xray, deworming." ;
+    rdfs:comment "Type of procedure administered." ;
     rdfs:domain vet:Treatment ;
-    rdfs:range xsd:string .
+    rdfs:range vet:TreatmentTypeValue .
 
 vet:medication a owl:DatatypeProperty ;
     rdfs:label "medication" ;
@@ -359,15 +359,15 @@ vet:finalAmount a owl:DatatypeProperty ;
 
 vet:paymentStatus a owl:DatatypeProperty ;
     rdfs:label "paymentStatus" ;
-    rdfs:comment "Status: pending, paid, overdue." ;
+    rdfs:comment "Payment status of the invoice." ;
     rdfs:domain vet:Invoice ;
-    rdfs:range xsd:string .
+    rdfs:range vet:PaymentStatusValue .
 
 vet:paymentMethod a owl:DatatypeProperty ;
     rdfs:label "paymentMethod" ;
-    rdfs:comment "How the invoice was paid: cash, credit_card, bank_transfer." ;
+    rdfs:comment "How the invoice was paid." ;
     rdfs:domain vet:Invoice ;
-    rdfs:range xsd:string .
+    rdfs:range vet:PaymentMethodValue .
 
 vet:paymentDate a owl:DatatypeProperty ;
     rdfs:label "paymentDate" ;

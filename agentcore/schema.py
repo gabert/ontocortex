@@ -27,6 +27,8 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from agentcore.sql_text import split_top_level
+
 # ── Logical type → SQLAlchemy type factories ──────────────────────────────────
 # Factories (not instances) because each Column needs its own type object.
 
@@ -46,34 +48,50 @@ def _format_server_default(value, logical_type: str) -> str:
     if logical_type == "boolean":
         return "TRUE" if value else "FALSE"
     if isinstance(value, str):
-        return f"'{value}'"
+        escaped = value.replace("'", "''")
+        return f"'{escaped}'"
     return str(value)
 
 
 # ── MetaData builder ──────────────────────────────────────────────────────────
 
+def _fk_column_type(by_name: dict, ref_table: str) -> object:
+    """Return a SQLAlchemy type matching the referenced table's PK type."""
+    ref_def = by_name.get(ref_table) or {}
+    pk_type = ref_def.get("primary_key_type", "integer")
+    return String(64) if pk_type == "text" else Integer
+
+
 def build_metadata(schema: dict) -> MetaData:
     """Build a SQLAlchemy MetaData from a logical schema dict.
 
     Tables are created in creation_order so that FK references resolve.
+    Supports both integer surrogate PKs and text PKs (used by lookup
+    tables, where the code itself is the primary key).
     """
     metadata = MetaData()
     by_name = {t["name"]: t for t in schema["tables"]}
 
     for table_name in schema["creation_order"]:
         table_def = by_name[table_name]
+        pk_type = table_def.get("primary_key_type", "integer")
 
         # Primary key
-        columns: list = [
-            Column(
-                table_def["primary_key"],
-                Integer,
-                primary_key=True,
-                autoincrement=True,
-            ),
-        ]
+        if pk_type == "text":
+            columns: list = [
+                Column(table_def["primary_key"], String(64), primary_key=True),
+            ]
+        else:
+            columns = [
+                Column(
+                    table_def["primary_key"],
+                    Integer,
+                    primary_key=True,
+                    autoincrement=True,
+                ),
+            ]
 
-        # Data columns
+        # Data columns (may carry inline FK via column.references)
         for col in table_def.get("columns", []):
             sa_type = _TYPE_FACTORIES[col["type"]]()
             kwargs: dict = {}
@@ -85,16 +103,20 @@ def build_metadata(schema: dict) -> MetaData:
                 kwargs["server_default"] = text(
                     _format_server_default(col["default"], col["type"])
                 )
-            columns.append(Column(col["name"], sa_type, **kwargs))
+            args: list = []
+            ref = col.get("references")
+            if ref:
+                args.append(ForeignKey(f"{ref['table']}.{ref['column']}"))
+            columns.append(Column(col["name"], sa_type, *args, **kwargs))
 
-        # Foreign key columns
+        # Table-level foreign key columns (integer surrogate FKs)
         for fk in table_def.get("foreign_keys", []):
-            ref = f"{fk['references_table']}.{fk['references_column']}"
+            ref_str = f"{fk['references_table']}.{fk['references_column']}"
             columns.append(
                 Column(
                     fk["column"],
-                    Integer,
-                    ForeignKey(ref),
+                    _fk_column_type(by_name, fk["references_table"]),
+                    ForeignKey(ref_str),
                     nullable=not fk.get("not_null", False),
                 )
             )
@@ -102,10 +124,11 @@ def build_metadata(schema: dict) -> MetaData:
         # Automatic timestamp
         columns.append(Column("created_at", DateTime(), server_default=func.now()))
 
-        # CHECK constraints from allowed_values
+        # CHECK constraints from allowed_values — skipped when the column
+        # already has a FK to a lookup table (the FK enforces the constraint).
         constraints: list = []
         for col in table_def.get("columns", []):
-            if "allowed_values" in col:
+            if "allowed_values" in col and not col.get("references"):
                 values = ", ".join(f"'{v}'" for v in col["allowed_values"])
                 constraints.append(
                     CheckConstraint(
@@ -151,11 +174,26 @@ def drop_tables(engine: Engine, schema: dict) -> None:
     metadata.drop_all(engine)
 
 
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split `sql` on `;` at the top level (quote- and paren-aware).
+
+    Thin wrapper around `agentcore.sql_text.split_top_level`; kept as
+    a module-local name because several call sites reach for it and
+    it's clearer at use sites than a bare `split_top_level(sql, ";")`.
+    """
+    return split_top_level(sql, ";")
+
+
 def load_seed_sql(engine: Engine, seed_sql: str) -> int:
-    """Execute seed SQL statements. Returns number of INSERTs executed."""
+    """Execute seed SQL statements atomically. Returns number of INSERTs executed.
+
+    Runs inside a single transaction via `engine.begin()`; any failing
+    statement rolls the whole batch back so the DB is never left in a
+    partially-seeded state.
+    """
     statements = [
         chunk.strip()
-        for chunk in seed_sql.split(";")
+        for chunk in _split_sql_statements(seed_sql)
         if chunk.strip()
         and not all(
             line.strip().startswith("--") or not line.strip()
@@ -163,10 +201,9 @@ def load_seed_sql(engine: Engine, seed_sql: str) -> int:
         )
     ]
 
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         for stmt in statements:
             conn.execute(text(stmt))
-        conn.commit()
 
     return sum(1 for s in statements if "INSERT" in s.upper())
 
@@ -197,7 +234,7 @@ def validate_seed_data(schema: dict, seed_sql: str) -> list[str]:
 
     statements = [
         chunk.strip()
-        for chunk in seed_sql.split(";")
+        for chunk in _split_sql_statements(seed_sql)
         if chunk.strip()
         and not all(
             line.strip().startswith("--") or not line.strip()
@@ -234,6 +271,8 @@ def build_schema_description(schema: dict) -> str:
 
     for table_name in schema["creation_order"]:
         t = by_name[table_name]
+        if t.get("lookup_table"):
+            continue
         lines.append(f"Table: {t['name']}  (PK: {t['primary_key']})")
 
         # Data columns
@@ -279,6 +318,8 @@ def build_validation_spec(schema: dict) -> tuple[dict, str]:
 
     for table_name in schema["creation_order"]:
         t = by_name[table_name]
+        if t.get("lookup_table"):
+            continue
         required = [c["name"] for c in t.get("columns", []) if c.get("required")]
         required += [fk["column"] for fk in t.get("foreign_keys", []) if fk.get("required")]
         unique = [c["name"] for c in t.get("columns", []) if c.get("unique")]

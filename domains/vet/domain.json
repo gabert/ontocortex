@@ -9,6 +9,7 @@
     "ontology_compact": "vet_ontology_compact.owl",
     "schema": "vet_schema.json",
     "ddl": "vet_schema.sql",
-    "seed_data": "vet_seed_data.sql"
+    "seed_data": "vet_seed_data.sql",
+    "schema_plan": "vet_schema_plan.yaml"
   }
 }

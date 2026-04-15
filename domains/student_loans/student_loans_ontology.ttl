@@ -1,0 +1,381 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Student Loans Domain Ontology
+# 7 entity types: Student, School, Lender, Cosigner, LoanType, Loan, Payment
+#
+# Standard OWL/Turtle — no custom annotations.
+# Schema decisions (FK placement, junction tables for M:M, constraints) are
+# inferred by the LLM architect from the domain semantics.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix sl:   <https://studentloans.example.org/ontology#> .
+
+<https://studentloans.example.org/ontology>
+    a owl:Ontology ;
+    rdfs:label "Student Loans Ontology" ;
+    rdfs:comment "Domain model for a student-loan advisory platform: borrowers, schools, lenders, loans, cosigners and repayments." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLASSES
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:Student a owl:Class ;
+    rdfs:label "Student" ;
+    rdfs:comment "A borrower who has taken out one or more student loans to finance education." .
+
+sl:School a owl:Class ;
+    rdfs:label "School" ;
+    rdfs:comment "An educational institution attended by a borrower. Loans fund tuition and related costs at a school." .
+
+sl:Lender a owl:Class ;
+    rdfs:label "Lender" ;
+    rdfs:comment "A financial institution or government agency that issues student loans." .
+
+sl:Cosigner a owl:Class ;
+    rdfs:label "Cosigner" ;
+    rdfs:comment "A person who co-guarantees a student loan. Typically a parent, relative or guardian with established credit." .
+
+sl:LoanType a owl:Class ;
+    rdfs:label "LoanType" ;
+    rdfs:comment "A category of student-loan product (federal subsidized, federal unsubsidized, private, etc.) with its own base interest rate and rules." .
+
+sl:Loan a owl:Class ;
+    rdfs:label "Loan" ;
+    rdfs:comment "A specific loan agreement between a student and a lender, funding education at a particular school." .
+
+sl:Payment a owl:Class ;
+    rdfs:label "Payment" ;
+    rdfs:comment "A repayment transaction applied against a loan: scheduled, paid, pending, failed, or reversed." .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ALLOWED VALUE SETS
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:EnrollmentStatusValue a owl:Class ;
+    rdfs:label "EnrollmentStatusValue" ;
+    owl:oneOf ( sl:enrolled sl:graduated sl:withdrawn ) .
+
+sl:SchoolTypeValue a owl:Class ;
+    rdfs:label "SchoolTypeValue" ;
+    owl:oneOf ( sl:university sl:college sl:community_college sl:vocational ) .
+
+sl:LenderTypeValue a owl:Class ;
+    rdfs:label "LenderTypeValue" ;
+    owl:oneOf ( sl:federal sl:private_bank sl:credit_union sl:state_agency ) .
+
+sl:CosignerRelationshipValue a owl:Class ;
+    rdfs:label "CosignerRelationshipValue" ;
+    owl:oneOf ( sl:parent sl:spouse sl:grandparent sl:sibling sl:guardian sl:other ) .
+
+sl:LoanTypeNameValue a owl:Class ;
+    rdfs:label "LoanTypeNameValue" ;
+    owl:oneOf ( sl:federal_subsidized sl:federal_unsubsidized sl:federal_plus sl:private sl:refinanced ) .
+
+sl:LoanStatusValue a owl:Class ;
+    rdfs:label "LoanStatusValue" ;
+    owl:oneOf ( sl:active sl:in_grace sl:in_repayment sl:deferred sl:forbearance sl:paid_off sl:defaulted ) .
+
+sl:PaymentMethodValue a owl:Class ;
+    rdfs:label "PaymentMethodValue" ;
+    owl:oneOf ( sl:autopay sl:bank_transfer sl:check sl:credit_card ) .
+
+sl:PaymentStatusValue a owl:Class ;
+    rdfs:label "PaymentStatusValue" ;
+    owl:oneOf ( sl:scheduled sl:paid sl:pending sl:failed sl:reversed ) .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OBJECT PROPERTIES  (relationships between classes)
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:hasBorrower a owl:ObjectProperty ;
+    rdfs:label "hasBorrower" ;
+    rdfs:comment "A loan is borrowed by exactly one student. One-to-many from the student side: a student may hold multiple loans." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range  sl:Student .
+
+sl:forSchool a owl:ObjectProperty ;
+    rdfs:label "forSchool" ;
+    rdfs:comment "A loan funds education at exactly one school. A school is associated with many loans." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range  sl:School .
+
+sl:issuedBy a owl:ObjectProperty ;
+    rdfs:label "issuedBy" ;
+    rdfs:comment "A loan is issued by exactly one lender. A lender issues many loans." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range  sl:Lender .
+
+sl:hasLoanType a owl:ObjectProperty ;
+    rdfs:label "hasLoanType" ;
+    rdfs:comment "A loan belongs to exactly one loan-type category. A loan type covers many loans." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range  sl:LoanType .
+
+sl:hasPayment a owl:ObjectProperty ;
+    rdfs:label "hasPayment" ;
+    rdfs:comment "A loan has many payments recorded against it over the repayment period." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range  sl:Payment .
+
+sl:hasCosigner a owl:ObjectProperty ;
+    rdfs:label "hasCosigner" ;
+    rdfs:comment "A loan may be co-guaranteed by one or more cosigners. This relationship is strictly many-to-many: a single loan may list several cosigners (e.g. both parents), and a single cosigner may back multiple loans across different borrowers (e.g. a parent co-signing loans for several children). Neither side is dependent on the other — the relationship must be represented with a junction table, not a foreign key on either endpoint." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range  sl:Cosigner .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — shared (person-like entities)
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:firstName a owl:DatatypeProperty ;
+    rdfs:label "firstName" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( sl:Student sl:Cosigner ) ] ;
+    rdfs:range xsd:string .
+
+sl:lastName a owl:DatatypeProperty ;
+    rdfs:label "lastName" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( sl:Student sl:Cosigner ) ] ;
+    rdfs:range xsd:string .
+
+sl:email a owl:DatatypeProperty ;
+    rdfs:label "email" ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( sl:Student sl:Cosigner ) ] ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Student
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:dateOfBirth a owl:DatatypeProperty ;
+    rdfs:label "dateOfBirth" ;
+    rdfs:domain sl:Student ;
+    rdfs:range xsd:date .
+
+sl:countryOfResidence a owl:DatatypeProperty ;
+    rdfs:label "countryOfResidence" ;
+    rdfs:domain sl:Student ;
+    rdfs:range xsd:string .
+
+sl:enrollmentStatus a owl:DatatypeProperty ;
+    rdfs:label "enrollmentStatus" ;
+    rdfs:comment "Current academic status: enrolled, graduated, withdrawn." ;
+    rdfs:domain sl:Student ;
+    rdfs:range sl:EnrollmentStatusValue .
+
+sl:graduationDate a owl:DatatypeProperty ;
+    rdfs:label "graduationDate" ;
+    rdfs:comment "Date the student graduated (or expected graduation date). Drives grace-period calculations." ;
+    rdfs:domain sl:Student ;
+    rdfs:range xsd:date .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — School
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:schoolName a owl:DatatypeProperty ;
+    rdfs:label "schoolName" ;
+    rdfs:domain sl:School ;
+    rdfs:range xsd:string .
+
+sl:schoolType a owl:DatatypeProperty ;
+    rdfs:label "schoolType" ;
+    rdfs:comment "Type of institution: university, college, community_college, vocational." ;
+    rdfs:domain sl:School ;
+    rdfs:range sl:SchoolTypeValue .
+
+sl:schoolCountry a owl:DatatypeProperty ;
+    rdfs:label "schoolCountry" ;
+    rdfs:domain sl:School ;
+    rdfs:range xsd:string .
+
+sl:schoolState a owl:DatatypeProperty ;
+    rdfs:label "schoolState" ;
+    rdfs:comment "State or province where the school is located." ;
+    rdfs:domain sl:School ;
+    rdfs:range xsd:string .
+
+sl:isAccredited a owl:DatatypeProperty ;
+    rdfs:label "isAccredited" ;
+    rdfs:comment "Whether the school is accredited. Federal loans require accredited schools." ;
+    rdfs:domain sl:School ;
+    rdfs:range xsd:boolean .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Lender
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:lenderName a owl:DatatypeProperty ;
+    rdfs:label "lenderName" ;
+    rdfs:domain sl:Lender ;
+    rdfs:range xsd:string .
+
+sl:lenderType a owl:DatatypeProperty ;
+    rdfs:label "lenderType" ;
+    rdfs:comment "Type of lender: federal, private_bank, credit_union, state_agency." ;
+    rdfs:domain sl:Lender ;
+    rdfs:range sl:LenderTypeValue .
+
+sl:lenderCountry a owl:DatatypeProperty ;
+    rdfs:label "lenderCountry" ;
+    rdfs:domain sl:Lender ;
+    rdfs:range xsd:string .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Cosigner
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:cosignerRelationship a owl:DatatypeProperty ;
+    rdfs:label "cosignerRelationship" ;
+    rdfs:comment "Relationship to the borrower: parent, spouse, grandparent, sibling, guardian, other." ;
+    rdfs:domain sl:Cosigner ;
+    rdfs:range sl:CosignerRelationshipValue .
+
+sl:annualIncome a owl:DatatypeProperty ;
+    rdfs:label "annualIncome" ;
+    rdfs:comment "Gross annual income of the cosigner, used for loan approval." ;
+    rdfs:domain sl:Cosigner ;
+    rdfs:range xsd:decimal .
+
+sl:creditScore a owl:DatatypeProperty ;
+    rdfs:label "creditScore" ;
+    rdfs:comment "FICO-style credit score of the cosigner at the time of application." ;
+    rdfs:domain sl:Cosigner ;
+    rdfs:range xsd:integer .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — LoanType
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:typeName a owl:DatatypeProperty ;
+    rdfs:label "typeName" ;
+    rdfs:comment "Product identifier: federal_subsidized, federal_unsubsidized, federal_plus, private, refinanced." ;
+    rdfs:domain sl:LoanType ;
+    rdfs:range sl:LoanTypeNameValue .
+
+sl:typeDescription a owl:DatatypeProperty ;
+    rdfs:label "typeDescription" ;
+    rdfs:domain sl:LoanType ;
+    rdfs:range xsd:string .
+
+sl:baseInterestRate a owl:DatatypeProperty ;
+    rdfs:label "baseInterestRate" ;
+    rdfs:comment "Annual base interest rate as a decimal fraction (e.g. 0.0553 for 5.53%)." ;
+    rdfs:domain sl:LoanType ;
+    rdfs:range xsd:decimal .
+
+sl:requiresCosigner a owl:DatatypeProperty ;
+    rdfs:label "requiresCosigner" ;
+    rdfs:comment "Whether this loan type requires at least one cosigner at origination." ;
+    rdfs:domain sl:LoanType ;
+    rdfs:range xsd:boolean .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Loan
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:loanNumber a owl:DatatypeProperty ;
+    rdfs:label "loanNumber" ;
+    rdfs:comment "Human-readable loan reference, e.g. SLN-2024-00017." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:string .
+
+sl:principalAmount a owl:DatatypeProperty ;
+    rdfs:label "principalAmount" ;
+    rdfs:comment "Original disbursed amount of the loan." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:decimal .
+
+sl:currentBalance a owl:DatatypeProperty ;
+    rdfs:label "currentBalance" ;
+    rdfs:comment "Outstanding balance including accrued but unpaid interest." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:decimal .
+
+sl:interestRate a owl:DatatypeProperty ;
+    rdfs:label "interestRate" ;
+    rdfs:comment "Actual annual interest rate on this specific loan, as a decimal fraction." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:decimal .
+
+sl:originationDate a owl:DatatypeProperty ;
+    rdfs:label "originationDate" ;
+    rdfs:comment "Date the loan was originated / disbursed." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:date .
+
+sl:termMonths a owl:DatatypeProperty ;
+    rdfs:label "termMonths" ;
+    rdfs:comment "Standard repayment term in months (e.g. 120 for a 10-year term)." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:integer .
+
+sl:loanStatus a owl:DatatypeProperty ;
+    rdfs:label "loanStatus" ;
+    rdfs:comment "Current lifecycle status: active, in_grace, in_repayment, deferred, forbearance, paid_off, defaulted." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range sl:LoanStatusValue .
+
+sl:autopayEnabled a owl:DatatypeProperty ;
+    rdfs:label "autopayEnabled" ;
+    rdfs:comment "Whether the borrower has enrolled in autopay (triggers a 0.25% rate reduction on most loan types)." ;
+    rdfs:domain sl:Loan ;
+    rdfs:range xsd:boolean .
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DATATYPE PROPERTIES — Payment
+# ───────────────────────────────────────────────────────────────────────────────
+
+sl:paymentNumber a owl:DatatypeProperty ;
+    rdfs:label "paymentNumber" ;
+    rdfs:comment "Human-readable payment reference, e.g. PAY-2025-003421." ;
+    rdfs:domain sl:Payment ;
+    rdfs:range xsd:string .
+
+sl:paymentDate a owl:DatatypeProperty ;
+    rdfs:label "paymentDate" ;
+    rdfs:domain sl:Payment ;
+    rdfs:range xsd:date .
+
+sl:amount a owl:DatatypeProperty ;
+    rdfs:label "amount" ;
+    rdfs:comment "Gross payment amount applied to the loan." ;
+    rdfs:domain sl:Payment ;
+    rdfs:range xsd:decimal .
+
+sl:principalPortion a owl:DatatypeProperty ;
+    rdfs:label "principalPortion" ;
+    rdfs:comment "Portion of the payment applied to principal after interest is covered." ;
+    rdfs:domain sl:Payment ;
+    rdfs:range xsd:decimal .
+
+sl:interestPortion a owl:DatatypeProperty ;
+    rdfs:label "interestPortion" ;
+    rdfs:comment "Portion of the payment applied to accrued interest." ;
+    rdfs:domain sl:Payment ;
+    rdfs:range xsd:decimal .
+
+sl:paymentMethod a owl:DatatypeProperty ;
+    rdfs:label "paymentMethod" ;
+    rdfs:comment "How the payment was made: autopay, bank_transfer, check, credit_card." ;
+    rdfs:domain sl:Payment ;
+    rdfs:range sl:PaymentMethodValue .
+
+sl:paymentStatus a owl:DatatypeProperty ;
+    rdfs:label "paymentStatus" ;
+    rdfs:comment "Status: scheduled, paid, pending, failed, reversed." ;
+    rdfs:domain sl:Payment ;
+    rdfs:range sl:PaymentStatusValue .

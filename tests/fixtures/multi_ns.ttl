@@ -1,0 +1,19 @@
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix crm:  <https://example.org/crm#> .
+@prefix pol:  <https://example.org/policy#> .
+
+<https://example.org/multi>
+    a owl:Ontology ;
+    rdfs:label "Multi-namespace fixture" .
+
+crm:Customer a owl:Class ;
+    rdfs:comment "A customer record owned by the CRM module." .
+
+pol:Policy a owl:Class ;
+    rdfs:comment "An insurance policy held by a CRM customer." .
+
+pol:heldBy a owl:ObjectProperty ;
+    rdfs:comment "A policy is held by exactly one customer." ;
+    rdfs:domain pol:Policy ;
+    rdfs:range  crm:Customer .

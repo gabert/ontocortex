@@ -1,7 +1,5 @@
-"""Three-agent pipeline components.
+"""Agent components.
 
-Import order matters for the anti-spaghetti rules:
-- base.py                          — no agentcore imports
-- conversation, planner, executor  — import plan.py and base.py only, never each other
-- pipeline.py                      — the only file that imports all three agents
+- base.py          — shared LLM call infrastructure
+- conversation.py  — user-facing dialogue, emits SIF via tool call
 """

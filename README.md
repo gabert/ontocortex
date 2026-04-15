@@ -6,7 +6,7 @@
 
 A pure OWL/Turtle ontology is the single source of truth for each domain — it drives database schema generation, test data loading, and agent context injection. Claude acts as the business logic layer: it receives the schema and business rules in its system prompt, generates SQL, executes it against PostgreSQL, and returns reasoned answers. There is no traditional service layer.
 
-Three domains ship as proof-of-concept: **insurance**, **vet clinic**, and **dragon breeding**.
+Three domains ship as proof-of-concept: **student loans**, **vet clinic**, and **dragon breeding**.
 
 > **Note:** Claude (Anthropic) is used as the LLM backend for prototyping. The framework will be migrated to LangChain to support multiple model backends.
 
@@ -66,7 +66,7 @@ Or fill it in directly in `config.ini` — see the comments in the template.
 
 **Generate schema from ontology** *(one-time per domain)*
 ```bash
-python scripts/design_schema.py insurance
+python scripts/design_schema.py student_loans
 ```
 
 **Run the web UI**
@@ -78,7 +78,7 @@ Opens at `http://localhost:8501` with a chat interface and an under-the-hood pan
 
 **Or run the CLI agent**
 ```bash
-python main.py insurance
+python main.py student_loans
 ```
 
 ---

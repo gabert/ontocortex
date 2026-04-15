@@ -1,0 +1,88 @@
+schema_version: 1
+ontology_hash: 7c0a73365278bfbb650ca9c07b449a8ad8d5ff27ced7a47f5abbfe66fc07ec68
+valid: true
+modules:
+- name: sl
+  tables:
+  - sl_cosigners
+  - sl_lenders
+  - sl_loan_types
+  - sl_loans
+  - sl_payments
+  - sl_schools
+  - sl_students
+tables:
+- name: sl_cosigners
+  ontology_iri: https://studentloans.example.org/ontology#Cosigner
+  primary_key: sl_cosigner_id
+  comment: A person who co-guarantees a student loan. Typically a parent, relative or guardian with established credit.
+- name: sl_lenders
+  ontology_iri: https://studentloans.example.org/ontology#Lender
+  primary_key: sl_lender_id
+  comment: A financial institution or government agency that issues student loans.
+- name: sl_loans
+  ontology_iri: https://studentloans.example.org/ontology#Loan
+  primary_key: sl_loan_id
+  comment: A specific loan agreement between a student and a lender, funding education at a particular school.
+- name: sl_loan_types
+  ontology_iri: https://studentloans.example.org/ontology#LoanType
+  primary_key: sl_loan_type_id
+  comment: A category of student-loan product (federal subsidized, federal unsubsidized, private, etc.) with its own base
+    interest rate and rules.
+- name: sl_payments
+  ontology_iri: https://studentloans.example.org/ontology#Payment
+  primary_key: sl_payment_id
+  comment: 'A repayment transaction applied against a loan: scheduled, paid, pending, failed, or reversed.'
+- name: sl_schools
+  ontology_iri: https://studentloans.example.org/ontology#School
+  primary_key: sl_school_id
+  comment: An educational institution attended by a borrower. Loans fund tuition and related costs at a school.
+- name: sl_students
+  ontology_iri: https://studentloans.example.org/ontology#Student
+  primary_key: sl_student_id
+  comment: A borrower who has taken out one or more student loans to finance education.
+relationships:
+- iri: https://studentloans.example.org/ontology#forSchool
+  kind: fk
+  child_table: sl_loans
+  parent_table: sl_schools
+  fk_column: sl_school_id
+- iri: https://studentloans.example.org/ontology#hasBorrower
+  kind: fk
+  child_table: sl_loans
+  parent_table: sl_students
+  fk_column: sl_student_id
+- iri: https://studentloans.example.org/ontology#hasCosigner
+  kind: junction
+  junction_table: sl_loan_cosigners
+  endpoint_a: sl_loans
+  endpoint_b: sl_cosigners
+- iri: https://studentloans.example.org/ontology#hasLoanType
+  kind: fk
+  child_table: sl_loans
+  parent_table: sl_loan_types
+  fk_column: sl_loan_type_id
+- iri: https://studentloans.example.org/ontology#hasPayment
+  kind: fk
+  child_table: sl_payments
+  parent_table: sl_loans
+  fk_column: sl_loan_id
+- iri: https://studentloans.example.org/ontology#issuedBy
+  kind: fk
+  child_table: sl_loans
+  parent_table: sl_lenders
+  fk_column: sl_lender_id
+creation_order:
+- level: 0
+  tables:
+  - sl_cosigners
+  - sl_lenders
+  - sl_loan_types
+  - sl_schools
+  - sl_students
+- level: 1
+  tables:
+  - sl_loans
+- level: 2
+  tables:
+  - sl_payments

@@ -31,10 +31,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from agentcore.architect.planner import PLAN_SCHEMA_VERSION as _PLAN_SCHEMA_VERSION
+from agentcore.architect.planner import ontology_hash
 from agentcore.domain import DomainConfig
-from agentcore.ontology import to_snake_case, to_table_name
-from agentcore.planner import PLAN_SCHEMA_VERSION as _PLAN_SCHEMA_VERSION
-from agentcore.planner import ontology_hash
+from agentcore.domain.ontology import to_snake_case, to_table_name
 
 # Structural version of the emitted schema.json. Bump whenever the output
 # shape changes so downstream tools can detect stale artifacts.

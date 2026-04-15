@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agentcore.config import ConfigError, load_config
 from agentcore.domain import list_domains, load_domain, update_domain_manifest
-from agentcore.planner import PlanValidationError, design_plan
+from agentcore.architect.planner import PlanValidationError, design_plan
 
 
 def main() -> None:

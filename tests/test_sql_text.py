@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from agentcore.sql_text import read_paren_group, split_top_level
+from agentcore.architect.sql_text import read_paren_group, split_top_level
 
 
 # ── split_top_level ──────────────────────────────────────────────────────────

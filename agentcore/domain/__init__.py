@@ -1,4 +1,11 @@
-"""Domain configuration loaded from <domains_dir>/<name>/domain.json."""
+"""Domain configuration loaded from <domains_dir>/<name>/domain.json.
+
+This package also holds the ontology parser (`agentcore.domain.ontology`)
+and the domain installer (`agentcore.domain.install`). The public
+surface — DomainConfig, load_domain, list_domains, update_domain_manifest
+— is re-exported here so callers keep writing `from agentcore.domain
+import DomainConfig`.
+"""
 
 import json
 import os
@@ -46,7 +53,7 @@ class DomainConfig:
         DomainConfig instance. If the file changes on disk, create a new
         instance via load_domain().
         """
-        from agentcore.ontology import build_ontology_model
+        from agentcore.domain.ontology import build_ontology_model
         return build_ontology_model(self.ontology_text, source_path=self.ontology_path)
 
     @property
@@ -75,7 +82,7 @@ class DomainConfig:
             )
         data = json.loads(self.schema_path.read_text(encoding="utf-8"))
 
-        from agentcore.reconciler import SCHEMA_VERSION
+        from agentcore.architect.reconciler import SCHEMA_VERSION
         version = data.get("schema_version")
         if version is not None and version != SCHEMA_VERSION:
             raise ValueError(

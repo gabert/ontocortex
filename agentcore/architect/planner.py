@@ -20,7 +20,7 @@ import warnings
 import yaml
 
 from agentcore.domain import DomainConfig
-from agentcore.ontology import to_pk_name, to_snake_case, to_table_name
+from agentcore.domain.ontology import to_pk_name, to_snake_case, to_table_name
 
 
 def ontology_hash(ontology_text: str) -> str:

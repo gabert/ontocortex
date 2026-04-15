@@ -32,17 +32,17 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agentcore.builder import GRANULARITY_MODULE, GRANULARITY_TABLE, build_modules
-from agentcore.config import ConfigError, load_config
-from agentcore.domain import list_domains, load_domain, update_domain_manifest
-from agentcore.planner import PLAN_SCHEMA_VERSION, ontology_hash
-from agentcore.reconciler import ReconcileError, reconcile
-from agentcore.schema import render_ddl
-from agentcore.seed_data import (
+from agentcore.architect.builder import GRANULARITY_MODULE, GRANULARITY_TABLE, build_modules
+from agentcore.architect.planner import PLAN_SCHEMA_VERSION, ontology_hash
+from agentcore.architect.reconciler import ReconcileError, reconcile
+from agentcore.architect.schema import render_ddl
+from agentcore.architect.seed_data import (
     DEFAULT_ROWS_PER_TABLE,
     seed_schema,
     write_seed_file,
 )
+from agentcore.config import ConfigError, load_config
+from agentcore.domain import list_domains, load_domain, update_domain_manifest
 
 
 def _parse_args() -> argparse.Namespace:

@@ -3,7 +3,7 @@ guards Builder output before it reaches the Reconciler."""
 
 from __future__ import annotations
 
-from agentcore.build_validation import collect_build_errors
+from agentcore.architect.build_validation import collect_build_errors
 
 
 _EXPECTED = ["ex_lenders", "ex_loans"]

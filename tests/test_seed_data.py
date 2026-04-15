@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from agentcore.seed_data import (
+from agentcore.architect.seed_data import (
     _build_entity_input,
     _collect_lookup_codes,
     _seed_junction_table,

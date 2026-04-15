@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 from agentcore.domain import load_domain
-from agentcore.planner import (
+from agentcore.architect.planner import (
     PlanValidationError,
     _junction_name,
     design_plan,

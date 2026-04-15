@@ -29,9 +29,9 @@ from typing import Literal
 import yaml
 from anthropic import APIStatusError, AsyncAnthropic
 
-from agentcore.build_validation import collect_build_errors
+from agentcore.architect.build_validation import collect_build_errors
+from agentcore.architect.reconciler import BUILDS_SUBDIR
 from agentcore.domain import DomainConfig
-from agentcore.reconciler import BUILDS_SUBDIR
 
 _MODEL = "claude-sonnet-4-6"
 _MAX_TOKENS = 4096

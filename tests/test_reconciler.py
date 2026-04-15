@@ -22,8 +22,8 @@ import json
 
 import pytest
 
-from agentcore.planner import design_plan
-from agentcore.reconciler import BUILDS_SUBDIR, ReconcileError, reconcile
+from agentcore.architect.planner import design_plan
+from agentcore.architect.reconciler import BUILDS_SUBDIR, ReconcileError, reconcile
 
 
 # Minimal ontology: two entities, one FK, one value set, one M:N.

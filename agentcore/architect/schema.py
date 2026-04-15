@@ -27,7 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from agentcore.sql_text import split_top_level
+from agentcore.architect.sql_text import split_top_level
 
 # ── Logical type → SQLAlchemy type factories ──────────────────────────────────
 # Factories (not instances) because each Column needs its own type object.

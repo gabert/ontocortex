@@ -5,7 +5,7 @@ import sys
 from agentcore.pipeline import AgentPipeline
 from agentcore.config import ConfigError, load_config
 from agentcore.domain import list_domains, load_domain
-from agentcore.setup import db_config_for_domain, database_ready, install_domain
+from agentcore.domain.install import db_config_for_domain, database_ready, install_domain
 
 
 def _error_hint(e: Exception) -> str:

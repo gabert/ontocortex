@@ -70,41 +70,6 @@ class BaseAgent:
                 else:
                     raise
 
-    def _call_api_with_tools(
-        self,
-        system_prompt: str,
-        messages: list[dict],
-        tools: list[dict],
-        max_iterations: int = 10,
-    ) -> tuple[str, list[dict]]:
-        """Run the agentic tool-use loop until a final text response is produced.
-
-        Subclasses must override _run_tools() to handle tool execution.
-
-        Returns:
-            (final_text, updated_messages)
-        """
-        for _ in range(max_iterations):
-            response = self._call_api(system_prompt, messages, tools=tools)
-
-            if response.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": self._run_tools(response)})
-                continue
-
-            text = self._extract_text(response)
-            messages.append({"role": "assistant", "content": text})
-            return text, messages
-
-        # Exhausted iterations — return whatever text we have
-        text = self._extract_text(response)
-        messages.append({"role": "assistant", "content": text})
-        return text, messages
-
-    def _run_tools(self, response) -> list[dict]:
-        """Execute tool calls from a response. Override in subclasses that use tools."""
-        raise NotImplementedError("Subclass must implement _run_tools")
-
     @staticmethod
     def _extract_text(response) -> str:
         """Extract the plain text from a final (non-tool-use) response."""

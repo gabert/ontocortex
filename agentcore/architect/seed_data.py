@@ -37,8 +37,8 @@ from pathlib import Path
 import yaml
 from anthropic import APIStatusError, AsyncAnthropic
 
+from agentcore.architect.sql_text import read_paren_group, split_top_level
 from agentcore.domain import DomainConfig
-from agentcore.sql_text import read_paren_group, split_top_level
 
 _MODEL = "claude-sonnet-4-6"
 _MAX_TOKENS = 4096

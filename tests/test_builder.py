@@ -18,15 +18,15 @@ import json
 
 import pytest
 
-from agentcore.builder import (
+from agentcore.architect.builder import (
     GRANULARITY_TABLE,
     ModuleBuildResult,
     _build_input,
     _build_module_input,
     build_modules,
 )
-from agentcore.planner import design_plan
-from agentcore.reconciler import BUILDS_SUBDIR, reconcile
+from agentcore.architect.planner import design_plan
+from agentcore.architect.reconciler import BUILDS_SUBDIR, reconcile
 
 
 # Same minimal TTL the reconciler tests use — one module, two entities,

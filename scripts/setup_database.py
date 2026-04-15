@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agentcore.config import ConfigError, load_config
 from agentcore.domain import list_domains, load_domain
-from agentcore.setup import install_domain
+from agentcore.domain.install import install_domain
 
 
 def main() -> None:

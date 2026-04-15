@@ -10,7 +10,7 @@ import streamlit as st
 from agentcore.pipeline import AgentPipeline
 from agentcore.config import load_config
 from agentcore.domain import list_domains, load_domain
-from agentcore.setup import database_ready, db_config_for_domain, install_domain
+from agentcore.domain.install import database_ready, db_config_for_domain, install_domain
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -28,7 +28,6 @@ def _init_state() -> None:
         "agent": None,
         "domain_name": None,
         "messages": [],        # {role, content} — display history
-        "last_data": None,     # last SELECT result rows for data pane
         "last_query_log": [],  # last turn's query log
         "hood_log": [],        # cumulative query log for under-the-hood pane
         "turn_count": 0,
@@ -61,7 +60,6 @@ def _load_domain(domain_key: str) -> None:
     st.session_state.agent = AgentPipeline(config, domain, verbose=False)
     st.session_state.domain_name = domain.name
     st.session_state.messages = []
-    st.session_state.last_data = None
     st.session_state.last_query_log = []
     st.session_state.hood_log = []
     st.session_state.turn_count = 0
@@ -75,72 +73,10 @@ def _reset_domain(domain_key: str) -> None:
     st.session_state.agent = AgentPipeline(config, domain, verbose=False)
     st.session_state.domain_name = domain.name
     st.session_state.messages = []
-    st.session_state.last_data = None
     st.session_state.last_query_log = []
     st.session_state.hood_log = []
     st.session_state.turn_count = 0
     st.session_state.status = f"Active: {domain.name} (fresh DB)"
-
-
-def _extract_last_data(query_log: list[dict]) -> list[dict] | None:
-    """Return the last non-empty SELECT result from the query log."""
-    for entry in reversed(query_log):
-        if entry.get("type") in ("sql", "sif") and not entry.get("is_write"):
-            results = entry.get("result") or entry.get("results")
-            if isinstance(results, list) and results:
-                return results
-    return None
-
-
-_HIDDEN_COLUMNS = {"created_at"}
-_HIDDEN_SUFFIXES = ("_id",)
-
-
-def _format_for_customer(rows: list[dict]) -> pd.DataFrame:
-    """Convert raw DB rows into a customer-friendly DataFrame.
-
-    - Drops internal columns (created_at, *_id FK columns)
-    - Renames snake_case → Title Case
-    - Formats dates and booleans
-    """
-    if not rows:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(rows)
-
-    # Drop hidden columns
-    drop = [
-        c for c in df.columns
-        if c in _HIDDEN_COLUMNS
-        or (c.endswith(_HIDDEN_SUFFIXES) and c != df.columns[0])  # keep PK
-    ]
-    df = df.drop(columns=drop, errors="ignore")
-
-    # Format values
-    for col in df.columns:
-        # Booleans → Yes / No
-        if df[col].dtype == bool or df[col].apply(lambda v: isinstance(v, bool)).any():
-            df[col] = df[col].map({True: "Yes", False: "No", None: ""})
-        else:
-            # Dates and datetimes → readable string
-            try:
-                converted = pd.to_datetime(df[col], errors="raise")
-                if converted.dt.time.eq(pd.Timestamp("00:00:00").time()).all():
-                    df[col] = converted.apply(lambda v: f"{v.day} {v.strftime('%b %Y')}")
-                else:
-                    df[col] = converted.apply(lambda v: f"{v.day} {v.strftime('%b %Y %H:%M')}")
-            except Exception:
-                pass
-
-    # Rename columns: snake_case → Title Case, strip leading table prefix
-    def _label(col: str) -> str:
-        # strip common prefixes like "dependent_", "policy_" etc.
-        parts = col.split("_")
-        return " ".join(p.capitalize() for p in parts)
-
-    df = df.rename(columns={c: _label(c) for c in df.columns})
-
-    return df
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -176,7 +112,6 @@ with st.sidebar:
             st.session_state.messages.clear(),
             st.session_state.hood_log.clear(),
             setattr(st.session_state, "turn_count", 0),
-            setattr(st.session_state, "last_data", None),
         ),
         disabled=st.session_state.agent is None,
         help="Clear conversation history, keep the current domain and database.",
@@ -188,9 +123,9 @@ with st.sidebar:
     else:
         st.success(st.session_state.status)
 
-# ── Main layout: chat | data ──────────────────────────────────────────────────
+# ── Main layout: conversation | under the hood ────────────────────────────────
 
-chat_col, data_col = st.columns([3, 2], gap="large")
+chat_col, hood_col = st.columns([1, 1], gap="large")
 
 # ── Chat pane ─────────────────────────────────────────────────────────────────
 
@@ -198,7 +133,7 @@ with chat_col:
     st.subheader("Conversation")
 
     # Fixed-height scrollable message history — only this box scrolls
-    chat_container = st.container(height=500)
+    chat_container = st.container(height=600)
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
@@ -223,10 +158,6 @@ with chat_col:
                     log = st.session_state.agent.last_query_log
                     st.session_state.last_query_log = log
 
-                    new_data = _extract_last_data(log)
-                    if new_data is not None:
-                        st.session_state.last_data = new_data
-
                     if log:
                         st.session_state.turn_count += 1
                         st.session_state.hood_log.append({
@@ -236,10 +167,8 @@ with chat_col:
                         st.session_state.hood_log.extend(log)
 
                 except Exception as e:
-                    agent = st.session_state.agent
-                    msgs = agent.conversation.messages
-                    if msgs and msgs[-1]["role"] == "user":
-                        msgs.pop()
+                    # Pipeline already rolled back conversation history via
+                    # snapshot — nothing to clean up here.
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": f"Something went wrong — {e}. Please try again.",
@@ -247,72 +176,61 @@ with chat_col:
 
             st.rerun()
 
-# ── Data pane ─────────────────────────────────────────────────────────────────
-
-with data_col:
-    st.subheader("Data")
-    data_container = st.container(height=500)
-    with data_container:
-        if st.session_state.last_data:
-            df = _format_for_customer(st.session_state.last_data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.caption("Query results will appear here.")
-
 # ── Under the hood ────────────────────────────────────────────────────────────
 
-st.subheader("Under the hood")
-hood_container = st.container(height=280)
-with hood_container:
-    if not st.session_state.hood_log:
-        st.caption("Database and tool activity will appear here.")
-    else:
-        # Split into turns and display latest turn first
-        turns = []
-        current_turn = []
-        for entry in st.session_state.hood_log:
-            if entry.get("type") == "turn":
-                if current_turn:
-                    turns.append(current_turn)
-                current_turn = [entry]
-            else:
-                current_turn.append(entry)
-        if current_turn:
-            turns.append(current_turn)
+with hood_col:
+    st.subheader("Under the hood")
+    hood_container = st.container(height=600)
+    with hood_container:
+        if not st.session_state.hood_log:
+            st.caption("Database and tool activity will appear here.")
+        else:
+            # Split into turns and display latest turn first
+            turns = []
+            current_turn = []
+            for entry in st.session_state.hood_log:
+                if entry.get("type") == "turn":
+                    if current_turn:
+                        turns.append(current_turn)
+                    current_turn = [entry]
+                else:
+                    current_turn.append(entry)
+            if current_turn:
+                turns.append(current_turn)
 
-        for turn in reversed(turns):
-            for entry in turn:
-                entry_type = entry.get("type")
+            for turn in reversed(turns):
+                for entry in turn:
+                    entry_type = entry.get("type")
 
-                # ── Turn separator ────────────────────────────────────────────
-                if entry_type == "turn":
-                    st.markdown(f"---\n**{entry['label']}**")
-                    continue
+                    # ── Turn separator ────────────────────────────────────────
+                    if entry_type == "turn":
+                        st.markdown(f"---\n**{entry['label']}**")
+                        continue
 
-                # ── SIF operation ─────────────────────────────────────────────
-                if entry_type == "sif":
-                    is_write = entry.get("is_write", False)
-                    result   = entry.get("result")
-                    query    = entry.get("sql", "")
+                    # ── SIF operation ─────────────────────────────────────────
+                    if entry_type == "sif":
+                        is_write = entry.get("is_write", False)
+                        result   = entry.get("result")
+                        query    = entry.get("sql", "")
 
-                    if is_write:
-                        st.markdown("**:orange[WRITE]**")
-                    else:
-                        st.markdown("**:blue[READ]**")
-                    st.code(query, language="sql")
-
-                    if isinstance(result, list):
-                        if result:
-                            st.dataframe(pd.DataFrame(result), use_container_width=True, hide_index=True)
+                        if is_write:
+                            st.markdown("**:orange[WRITE]**")
                         else:
-                            st.caption("No rows returned.")
-                    elif isinstance(result, dict):
-                        if "error" in result:
-                            st.error(result)
-                        else:
-                            st.caption(f"{result.get('rows_affected', 0)} row(s) affected")
+                            st.markdown("**:blue[READ]**")
+                        st.code(query, language="sql")
 
-                # ── Action ───────────────────────────────────────────────────
-                elif entry_type == "action":
-                    st.markdown(f"**:violet[ACTION]** `{entry.get('action', '')}`")
-                    st.caption(str(entry.get("result", "")))
+                        if isinstance(result, list):
+                            if result:
+                                st.dataframe(pd.DataFrame(result), use_container_width=True, hide_index=True)
+                            else:
+                                st.caption("No rows returned.")
+                        elif isinstance(result, dict):
+                            if "error" in result:
+                                st.error(result)
+                            else:
+                                st.caption(f"{result.get('rows_affected', 0)} row(s) affected")
+
+                    # ── Action ────────────────────────────────────────────────
+                    elif entry_type == "action":
+                        st.markdown(f"**:violet[ACTION]** `{entry.get('action', '')}`")
+                        st.caption(str(entry.get("result", "")))

@@ -4,9 +4,9 @@ import psycopg2
 from psycopg2 import sql
 from sqlalchemy import create_engine
 
+from agentcore.architect.schema import create_tables, load_seed_sql
 from agentcore.config import AppConfig, DatabaseConfig
 from agentcore.domain import DomainConfig
-from agentcore.schema import create_tables, load_seed_sql
 
 
 def db_config_for_domain(app_cfg: AppConfig, domain: DomainConfig) -> DatabaseConfig:

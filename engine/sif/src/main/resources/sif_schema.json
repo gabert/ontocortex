@@ -1,0 +1,122 @@
+{
+  "type": "object",
+  "properties": {
+    "operations": {
+      "type": "array",
+      "description": "List of SIF operations to execute in order. The whole list runs in a single database transaction — any failure rolls back the entire batch.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": ["query", "create", "update", "delete", "link", "unlink", "action"],
+            "description": "Operation type. Use 'link'/'unlink' to attach or detach two existing entities across a many-to-many relation. Use 'action' for domain-specific business logic."
+          },
+          "entity": {
+            "type": "string",
+            "description": "Ontology class name (e.g. Customer, Policy, Pet). Required for query/create/update/delete."
+          },
+          "action": {
+            "type": "string",
+            "description": "Action only: name of the registered domain action to invoke."
+          },
+          "params": {
+            "type": "object",
+            "description": "Action only: parameters to pass to the action."
+          },
+          "fields": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Query only: which fields to return. Omit for all fields."
+          },
+          "filters": {
+            "type": "object",
+            "description": "Equality filters: {property_name: value}."
+          },
+          "relations": {
+            "type": "array",
+            "description": "Query only: chain of relations to traverse for joins.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rel": {
+                  "type": "string",
+                  "description": "Ontology relationship name."
+                },
+                "entity": {
+                  "type": "string",
+                  "description": "Ontology class on the other end."
+                },
+                "filters": {
+                  "type": "object",
+                  "description": "Equality filters on the related entity."
+                }
+              },
+              "required": ["rel", "entity"]
+            }
+          },
+          "data": {
+            "type": "object",
+            "description": "Create/update: {property_name: value} to set."
+          },
+          "resolve": {
+            "type": "object",
+            "description": "Create only: resolve related entities for FK values. Keys are relationship names, values are {entity, filters} lookup specs."
+          },
+          "relation": {
+            "type": "string",
+            "description": "Link/unlink only: ontology relation traversing a junction table."
+          },
+          "from": {
+            "type": "object",
+            "description": "Link/unlink only: {entity, filters} specifying one end of the link.",
+            "properties": {
+              "entity": {"type": "string"},
+              "filters": {"type": "object"}
+            },
+            "required": ["entity", "filters"]
+          },
+          "to": {
+            "type": "object",
+            "description": "Link/unlink only: {entity, filters} specifying the other end.",
+            "properties": {
+              "entity": {"type": "string"},
+              "filters": {"type": "object"}
+            },
+            "required": ["entity", "filters"]
+          },
+          "aggregate": {
+            "type": "object",
+            "description": "Query only: {fn: count|sum|avg|min|max, field?: property_name}.",
+            "properties": {
+              "fn": {
+                "type": "string",
+                "enum": ["count", "sum", "avg", "min", "max"]
+              },
+              "field": {"type": "string"}
+            },
+            "required": ["fn"]
+          },
+          "sort": {
+            "type": "object",
+            "description": "Query only: {field: property_name, dir: asc|desc}.",
+            "properties": {
+              "field": {"type": "string"},
+              "dir": {
+                "type": "string",
+                "enum": ["asc", "desc"]
+              }
+            },
+            "required": ["field"]
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Query only: max rows to return."
+          }
+        },
+        "required": ["op"]
+      }
+    }
+  },
+  "required": ["operations"]
+}

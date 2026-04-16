@@ -1,45 +1,33 @@
 plugins {
     java
-    id("org.springframework.boot") version "3.3.5"
-    id("io.spring.dependency-management") version "1.1.6"
+    id("org.springframework.boot") version "3.3.5" apply false
+    id("io.spring.dependency-management") version "1.1.6" apply false
 }
 
-group = "com.agentcore"
-version = "0.1.0"
+subprojects {
+    apply(plugin = "java")
+    apply(plugin = "io.spring.dependency-management")
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
+    group = "com.ontocore"
+    version = "0.1.0"
 
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    // Spring Boot
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-jdbc")
-    implementation("org.springframework.boot:spring-boot-starter-validation")
-
-    // Database
-    implementation("org.postgresql:postgresql:42.7.4")
-
-    // Apache Jena (OWL/Turtle parsing)
-    implementation("org.apache.jena:apache-jena-libs:5.1.0") {
-        exclude(group = "org.slf4j", module = "slf4j-log4j12")
-        exclude(group = "log4j", module = "log4j")
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
     }
 
-    // YAML parsing (included via Spring Boot, declare explicitly for clarity)
-    implementation("org.yaml:snakeyaml")
+    repositories {
+        mavenCentral()
+    }
 
-    // Testing
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.assertj:assertj-core")
-}
+    the<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension>().apply {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:3.3.5")
+        }
+    }
 
-tasks.test {
-    useJUnitPlatform()
+    tasks.test {
+        useJUnitPlatform()
+    }
 }

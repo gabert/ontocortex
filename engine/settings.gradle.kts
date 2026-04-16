@@ -1,1 +1,3 @@
-rootProject.name = "ontocore-engine"
+rootProject.name = "ontocore"
+
+include("sif", "core")

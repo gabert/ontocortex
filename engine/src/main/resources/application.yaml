@@ -1,0 +1,35 @@
+spring:
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+  # Disable auto-configured DataSource — we manage connections per domain
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+
+server:
+  port: 8080
+
+engine:
+  domains-dir: ../domains
+  data-sources:
+    student_loans_demo:
+      dbname: student_loans_demo
+      user: postgres
+      password: postgres
+      host: localhost
+      port: 5432
+    vet_demo:
+      dbname: vet_demo
+      user: postgres
+      password: postgres
+      host: localhost
+      port: 5432
+    dragon_demo:
+      dbname: dragon_demo
+      user: postgres
+      password: postgres
+      host: localhost
+      port: 5432

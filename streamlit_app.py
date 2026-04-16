@@ -9,8 +9,11 @@ import streamlit as st
 
 from agentcore.pipeline import AgentPipeline
 from agentcore.config import load_config
+from agentcore.database import execute_query
 from agentcore.domain import list_domains, load_domain
 from agentcore.domain.install import database_ready, db_config_for_domain, install_domain
+from agentcore.identity import IdentityContext
+from agentcore.sif.mapping import build_schema_map_from_mapping
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
@@ -32,6 +35,9 @@ def _init_state() -> None:
         "hood_log": [],        # cumulative query log for under-the-hood pane
         "turn_count": 0,
         "status": "No domain loaded.",
+        "identity": None,       # IdentityContext | None
+        "identity_users": [],   # list of dicts for the user picker
+        "identity_entity": None,  # str | None — ontology class name
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -50,13 +56,36 @@ domains_dir = config.domains_dir
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _fetch_identity_users(db_cfg, domain) -> tuple[list[dict], str | None]:
+    """Fetch candidate users for identity picker. Returns (rows, entity_name)."""
+    if not domain.identity_entity:
+        return [], None
+    if not domain.has_mapping:
+        return [], domain.identity_entity
+    smap = build_schema_map_from_mapping(domain.ontology_model, domain.mapping_data)
+    table = smap.tables.get(domain.identity_entity)
+    if not table:
+        return [], None
+    rows = execute_query(
+        db_cfg,
+        f"SELECT * FROM {table.table_name} ORDER BY {table.primary_key} LIMIT 20",
+    )
+    if not rows or isinstance(rows, dict):
+        return [], domain.identity_entity
+    return rows, domain.identity_entity
+
+
 def _load_domain(domain_key: str) -> None:
     domain = load_domain(domain_key, domains_dir)
     db_cfg = db_config_for_domain(config, domain)
-    if not database_ready(db_cfg, domain.database_name):
+    if not database_ready(db_cfg, domain.store):
         st.toast(f"Database not found — installing {domain.name}…")
         db_cfg = install_domain(config, domain)
     config.database = db_cfg
+    users, entity = _fetch_identity_users(db_cfg, domain)
+    st.session_state.identity_users = users
+    st.session_state.identity_entity = entity
+    st.session_state.identity = None
     st.session_state.agent = AgentPipeline(config, domain, verbose=False)
     st.session_state.domain_name = domain.name
     st.session_state.messages = []
@@ -70,6 +99,10 @@ def _reset_domain(domain_key: str) -> None:
     domain = load_domain(domain_key, domains_dir)
     db_cfg = install_domain(config, domain)
     config.database = db_cfg
+    users, entity = _fetch_identity_users(db_cfg, domain)
+    st.session_state.identity_users = users
+    st.session_state.identity_entity = entity
+    st.session_state.identity = None
     st.session_state.agent = AgentPipeline(config, domain, verbose=False)
     st.session_state.domain_name = domain.name
     st.session_state.messages = []
@@ -117,11 +150,65 @@ with st.sidebar:
         help="Clear conversation history, keep the current domain and database.",
     )
 
+    # ── Identity picker ─────────────────────────────────────────────
+    if st.session_state.identity_users:
+        st.divider()
+        entity = st.session_state.identity_entity or "User"
+        users = st.session_state.identity_users
+
+        # Build display labels from first few non-PK columns
+        def _label(row: dict) -> str:
+            vals = [f"{v}" for k, v in row.items() if v is not None][1:4]
+            return " | ".join(vals)
+
+        options = ["(no identity scoping)"] + [_label(u) for u in users]
+        current_idx = 0
+        if st.session_state.identity:
+            for i, u in enumerate(users):
+                pk_col = list(u.keys())[0]
+                if u[pk_col] == st.session_state.identity.user_id:
+                    current_idx = i + 1
+                    break
+
+        choice = st.selectbox(
+            f"Logged in as ({entity})",
+            range(len(options)),
+            format_func=lambda i: options[i],
+            index=current_idx,
+            key="identity_picker",
+        )
+
+        if choice == 0:
+            if st.session_state.identity is not None:
+                st.session_state.identity = None
+                if st.session_state.agent:
+                    st.session_state.agent.identity = None
+                    st.session_state.agent.set_user_context(None)
+                    st.session_state.messages.clear()
+                    st.session_state.hood_log.clear()
+                    st.session_state.turn_count = 0
+        else:
+            row = users[choice - 1]
+            pk_col = list(row.keys())[0]
+            pk_val = row[pk_col]
+            new_id = IdentityContext(user_id=pk_val)
+            if st.session_state.identity is None or st.session_state.identity.user_id != pk_val:
+                st.session_state.identity = new_id
+                if st.session_state.agent:
+                    st.session_state.agent.identity = new_id
+                    st.session_state.agent.set_user_context(row)
+                    st.session_state.messages.clear()
+                    st.session_state.hood_log.clear()
+                    st.session_state.turn_count = 0
+
     st.divider()
     if st.session_state.agent is None:
         st.warning(st.session_state.status)
     else:
-        st.success(st.session_state.status)
+        identity_info = ""
+        if st.session_state.identity:
+            identity_info = f" | {st.session_state.identity_entity} #{st.session_state.identity.user_id}"
+        st.success(st.session_state.status + identity_info)
 
 # ── Main layout: conversation | under the hood ────────────────────────────────
 

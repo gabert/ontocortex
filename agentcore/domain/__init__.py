@@ -20,18 +20,30 @@ class DomainConfig:
     dir_name: str
     name: str
     description: str
-    database_name: str
+    data_source: str              # Selected data source identifier (e.g. "primary")
+    store: str                    # Backend-specific locator (DB name, dir path, ...)
     ontology_path: Path
     rules_path: Path
     prompt_path: Path
+    source_dir: Path              # Per-data-source directory (overrides, mapping, generated)
     schema_path: Path | None = None
     seed_data_path: Path | None = None
     ontology_compact_path: Path | None = None
     schema_plan_path: Path | None = None
+    mapping_path: Path | None = None
+    identity_entity: str | None = None  # Ontology class representing the user
+
+    @property
+    def domain_dir(self) -> Path:
+        return self.ontology_path.parent
 
     @property
     def generated_dir(self) -> Path:
-        return self.ontology_path.parent / "_generated"
+        return self.source_dir / "_generated"
+
+    @property
+    def overrides_path(self) -> Path:
+        return self.source_dir / "overrides.yaml"
 
     @property
     def ontology_text(self) -> str:
@@ -64,6 +76,19 @@ class DomainConfig:
         return None
 
     @property
+    def has_mapping(self) -> bool:
+        """Whether a mapping file is available."""
+        return self.mapping_path is not None and self.mapping_path.exists()
+
+    @property
+    def mapping_data(self) -> dict:
+        """Load and return the mapping file."""
+        if not self.has_mapping:
+            raise FileNotFoundError("No mapping file found.")
+        import yaml
+        return yaml.safe_load(self.mapping_path.read_text(encoding="utf-8"))
+
+    @property
     def has_designed_schema(self) -> bool:
         """Whether an LLM-designed logical schema is available."""
         return self.schema_path is not None and self.schema_path.exists()
@@ -93,8 +118,16 @@ class DomainConfig:
         return data
 
 
-def load_domain(domain_name: str, domains_dir: Path) -> DomainConfig:
-    """Load a domain configuration from <domains_dir>/<domain_name>/domain.json."""
+def load_domain(
+    domain_name: str, domains_dir: Path, *, data_source: str | None = None,
+) -> DomainConfig:
+    """Load a domain configuration from <domains_dir>/<domain_name>/domain.json.
+
+    ``data_source`` selects which named data source to activate. When
+    omitted the first entry in ``data_sources`` is used.  If the manifest
+    has no ``data_sources`` key, falls back to legacy ``database_name`` +
+    ``mapping`` top-level keys (backward compatibility).
+    """
     domain_dir = domains_dir / domain_name
     manifest_path = domain_dir / "domain.json"
 
@@ -108,8 +141,32 @@ def load_domain(domain_name: str, domains_dir: Path) -> DomainConfig:
     with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
 
+    # ── Resolve data source ──────────────────────────────────────────
+    data_sources = manifest.get("data_sources")
+    if data_sources:
+        if data_source is None:
+            ds_name = next(iter(data_sources))
+        else:
+            ds_name = data_source
+        if ds_name not in data_sources:
+            raise ValueError(
+                f"Data source '{ds_name}' not found in domain '{domain_name}'. "
+                f"Available: {', '.join(sorted(data_sources))}"
+            )
+        ds = data_sources[ds_name]
+        store = ds["store"]
+        source_dir_rel = ds.get("source_dir", f"data_sources/{ds_name}")
+        mapping_file = ds.get("mapping", "mapping.yaml")
+    else:
+        # Legacy format: top-level database_name + mapping
+        ds_name = manifest.get("database_name", domain_name)
+        store = manifest["database_name"]
+        source_dir_rel = f"data_sources/{ds_name}"
+        mapping_file = "mapping.yaml"
+
+    source_dir = domain_dir / source_dir_rel
+    generated_dir = source_dir / "_generated"
     generated = manifest.get("generated", {})
-    generated_dir = domain_dir / "_generated"
     schema_file = generated.get("schema")
     seed_file = generated.get("seed_data")
     compact_file = generated.get("ontology_compact")
@@ -119,14 +176,18 @@ def load_domain(domain_name: str, domains_dir: Path) -> DomainConfig:
         dir_name=domain_name,
         name=manifest["name"],
         description=manifest["description"],
-        database_name=manifest["database_name"],
+        data_source=ds_name,
+        store=store,
         ontology_path=domain_dir / manifest["ontology"],
         rules_path=domain_dir / manifest["business_rules"],
         prompt_path=domain_dir / manifest["system_prompt"],
+        source_dir=source_dir,
         schema_path=generated_dir / schema_file if schema_file else None,
         seed_data_path=generated_dir / seed_file if seed_file else None,
         ontology_compact_path=generated_dir / compact_file if compact_file else None,
         schema_plan_path=generated_dir / plan_file if plan_file else None,
+        mapping_path=source_dir / mapping_file if mapping_file else None,
+        identity_entity=manifest.get("identity_entity"),
     )
 
 
@@ -138,24 +199,40 @@ def list_domains(domains_dir: Path) -> list[str]:
     )
 
 
-def update_domain_manifest(domain: DomainConfig, **generated_keys: str) -> None:
-    """Merge one or more keys into the 'generated' section of domain.json.
+def update_domain_manifest(
+    domain: DomainConfig,
+    *,
+    data_source_entry: tuple[str, dict] | None = None,
+    **generated_keys: str,
+) -> None:
+    """Merge keys into domain.json (generated section + optional data source).
 
     Call after each pipeline step with just the key(s) produced by that step:
         update_domain_manifest(domain, schema_plan=plan_file)
         update_domain_manifest(domain, schema=schema_file)
-        update_domain_manifest(domain, seed_data=seed_file)
+        update_domain_manifest(
+            domain,
+            data_source_entry=("primary", {"store": "mydb", ...}),
+        )
+
+    The ``data_source_entry`` parameter is a ``(name, definition)`` tuple
+    that is merged into the ``"data_sources"`` dict. All other keyword
+    arguments are merged into the ``"generated"`` section.
 
     Written atomically: the new manifest lands in a sibling temp file
     and is then renamed into place with `os.replace`. An interrupt
     mid-write therefore leaves either the old manifest intact or the
     new one fully flushed — never a truncated file.
     """
-    manifest_path = domain.ontology_path.parent / "domain.json"
+    manifest_path = domain.domain_dir / "domain.json"
     with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
 
-    manifest.setdefault("generated", {}).update(generated_keys)
+    if data_source_entry is not None:
+        ds_name, ds_def = data_source_entry
+        manifest.setdefault("data_sources", {})[ds_name] = ds_def
+    if generated_keys:
+        manifest.setdefault("generated", {}).update(generated_keys)
 
     # Write to a tempfile in the same directory so `os.replace` is
     # guaranteed atomic (same filesystem) on both POSIX and Windows.

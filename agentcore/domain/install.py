@@ -10,14 +10,17 @@ from agentcore.domain import DomainConfig
 
 
 def db_config_for_domain(app_cfg: AppConfig, domain: DomainConfig) -> DatabaseConfig:
-    """Build a DatabaseConfig that targets the domain's database."""
-    return DatabaseConfig(
-        dbname=domain.database_name,
-        user=app_cfg.database.user,
-        password=app_cfg.database.password,
-        host=app_cfg.database.host,
-        port=app_cfg.database.port,
-    )
+    """Resolve connection config for the domain's active data source.
+
+    Looks up ``[data_source:NAME]`` in config.ini where NAME is
+    ``domain.store``.
+    """
+    if domain.store not in app_cfg.data_sources:
+        raise ValueError(
+            f"No [data_source:{domain.store}] section in config.ini. "
+            f"Add it with dbname, user, password, host, and port."
+        )
+    return app_cfg.data_sources[domain.store]
 
 
 def database_ready(cfg: DatabaseConfig, dbname: str) -> bool:
@@ -120,7 +123,7 @@ def load_test_data(db_cfg: DatabaseConfig, domain: DomainConfig) -> None:
 def install_domain(app_cfg: AppConfig, domain: DomainConfig) -> DatabaseConfig:
     """Full install: drop/create DB, apply schema, load test data. Returns the db config."""
     db_cfg = db_config_for_domain(app_cfg, domain)
-    drop_and_create(db_cfg, domain.database_name)
+    drop_and_create(db_cfg, domain.store)
     apply_schema(db_cfg, domain)
     load_test_data(db_cfg, domain)
     return db_cfg

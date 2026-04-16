@@ -18,9 +18,14 @@ import json
 
 from agentcore.actions import get_registered_actions
 from agentcore.database import execute_on_conn, open_transaction
+from agentcore.identity import IdentityContext, OwnershipMap
 from agentcore.sif import LinkPlan, SchemaMap, TableMap, TranslationError
 from agentcore.sif.validation import validate_operations
+from agentcore.sif_sql.identity import apply_identity, scope_link_plan
 from agentcore.sif_sql.translator import SQLStatement, translate
+
+
+# ── Main entry point ────────────────────────────────────────────────────────
 
 
 def execute_sif(
@@ -28,6 +33,8 @@ def execute_sif(
     schema_map: SchemaMap,
     db_config,
     verbose: bool = False,
+    identity: IdentityContext | None = None,
+    ownership: OwnershipMap | None = None,
 ) -> tuple[str, list[dict]]:
     """Translate and execute SIF operations atomically. Returns (result_text, query_log).
 
@@ -45,112 +52,40 @@ def execute_sif(
     query_log: list[dict] = []
     prior: list[dict] = []
 
-    # Pre-flight validation — reject the whole batch before touching the DB
     validation_errors = validate_operations(operations, schema_map)
     if validation_errors:
-        return (
-            "SIF validation failed (nothing was executed):\n"
-            + "\n".join(f"- {e}" for e in validation_errors)
-            + "\n\nFix the operations and resubmit.",
-            query_log,
-        )
+        return _format_validation_failure(validation_errors), query_log
 
     with open_transaction(db_config) as (conn, tx):
         for idx, op in enumerate(operations, start=1):
             op_type = op.get("op")
 
-            # Action ops dispatch to registered Python functions
             if op_type == "action":
-                failure = _dispatch_action(
-                    op, schema_map, db_config, query_log, prior, verbose,
-                )
-                if failure is not None:
-                    return _format_with_failure(prior, idx, failure), query_log
-                continue
+                failure = _run_action(op, schema_map, db_config, query_log, prior, verbose)
+            elif op_type in ("link", "unlink"):
+                failure = _run_link(op, schema_map, identity, ownership, conn, query_log, prior, verbose)
+            else:
+                failure = _run_crud(op, schema_map, identity, ownership, conn, query_log, prior, verbose)
 
-            # Link / unlink — translate to a LinkPlan, then walk it
-            if op_type in ("link", "unlink"):
-                try:
-                    plan = translate(op, schema_map)
-                except TranslationError as e:
-                    return (
-                        _format_with_failure(prior, idx, f"Translation error: {e}"),
-                        query_log,
-                    )
-                assert isinstance(plan, LinkPlan)
+            if failure is not None:
+                return _format_with_failure(prior, idx, failure), query_log
 
-                ok, message, log_entry = _execute_link_plan(op, plan, conn, verbose)
-                if log_entry is not None:
-                    query_log.append(log_entry)
-                if not ok:
-                    return _format_with_failure(prior, idx, message), query_log
-                prior.append({
-                    "operation": op_type,
-                    "entity": f"{plan.from_table.class_name}↔{plan.to_table.class_name}",
-                    "result": message,
-                })
-                continue
-
-            # CRUD ops translate to SQL
-            try:
-                stmt = translate(op, schema_map)
-            except TranslationError as e:
-                return (
-                    _format_with_failure(prior, idx, f"Translation error: {e}"),
-                    query_log,
-                )
-            assert isinstance(stmt, SQLStatement)
-
-            if verbose:
-                short = " ".join(stmt.sql.split())
-                label = "WRITE" if stmt.is_write else "READ"
-                print(f"    [SIF {label}] {short[:120]}{'...' if len(short) > 120 else ''}")
-
-            result = execute_on_conn(conn, stmt.sql, stmt.is_write, params=stmt.params)
-            query_log.append({
-                "type": "sif",
-                "operation": op,
-                "sql": stmt.sql,
-                "params": stmt.params,
-                "is_write": stmt.is_write,
-                "result": result,
-            })
-
-            if isinstance(result, dict) and "error" in result:
-                err_lines = [f"{result['error']}"]
-                if result.get("detail"):
-                    err_lines.append(f"Detail: {result['detail']}")
-                return (
-                    _format_with_failure(prior, idx, "Database error: " + "\n".join(err_lines)),
-                    query_log,
-                )
-
-            prior.append({
-                "operation": op["op"],
-                "entity": op.get("entity", ""),
-                "result": result,
-            })
-
-        # All ops succeeded — commit before leaving the context.
         tx.commit()
 
     return _format_results(prior), query_log
 
 
-# ── Action dispatch ──────────────────────────────────────────────────────────
+# ── Op runners ──────────────────────────────────────────────────────────────
+#
+# Each returns None on success (mutating query_log and prior in place)
+# or an error string on failure (triggering rollback in the caller).
 
-def _dispatch_action(
-    op: dict,
-    schema_map: SchemaMap,
-    db_config,
-    query_log: list[dict],
-    prior: list[dict],
-    verbose: bool,
+
+def _run_action(
+    op: dict, schema_map: SchemaMap, db_config,
+    query_log: list[dict], prior: list[dict], verbose: bool,
 ) -> str | None:
-    """Run one action op. Returns None on success, error text on failure.
-
-    Mutates `query_log` and `prior` in place on success.
-    """
+    """Dispatch an action op to its registered Python function."""
     action_name = op.get("action", "")
     registry = get_registered_actions()
     action_entry = registry.get(action_name)
@@ -161,38 +96,89 @@ def _dispatch_action(
         print(f"    [SIF ACTION] {action_name}")
 
     try:
-        action_result = action_entry["fn"](
-            op.get("params", {}), db_config, schema_map,
-        )
+        result = action_entry["fn"](op.get("params", {}), db_config, schema_map)
     except Exception as e:
         return f"Action error ({action_name}): {e}"
 
-    query_log.append({
-        "type": "action",
-        "action": action_name,
-        "params": op.get("params", {}),
-        "result": action_result,
-    })
+    query_log.append({"type": "action", "action": action_name,
+                       "params": op.get("params", {}), "result": result})
+    prior.append({"operation": "action", "entity": action_name, "result": result})
+    return None
+
+
+def _run_link(
+    op: dict, schema_map: SchemaMap,
+    identity: IdentityContext | None, ownership: OwnershipMap | None,
+    conn, query_log: list[dict], prior: list[dict], verbose: bool,
+) -> str | None:
+    """Translate a link/unlink op and execute it."""
+    try:
+        plan = translate(op, schema_map)
+    except TranslationError as e:
+        return f"Translation error: {e}"
+    assert isinstance(plan, LinkPlan)
+
+    if identity and ownership:
+        plan = scope_link_plan(plan, identity, ownership)
+
+    ok, message, log_entry = _execute_link_plan(op, plan, conn, verbose)
+    if log_entry is not None:
+        query_log.append(log_entry)
+    if not ok:
+        return message
+
     prior.append({
-        "operation": "action",
-        "entity": action_name,
-        "result": action_result,
+        "operation": plan.op,
+        "entity": f"{plan.from_table.class_name}\u2194{plan.to_table.class_name}",
+        "result": message,
     })
     return None
 
 
-# ── Link / unlink execution ──────────────────────────────────────────────────
+def _run_crud(
+    op: dict, schema_map: SchemaMap,
+    identity: IdentityContext | None, ownership: OwnershipMap | None,
+    conn, query_log: list[dict], prior: list[dict], verbose: bool,
+) -> str | None:
+    """Translate a CRUD op, apply identity scoping, and execute."""
+    try:
+        stmt = translate(op, schema_map)
+    except TranslationError as e:
+        return f"Translation error: {e}"
+    assert isinstance(stmt, SQLStatement)
+
+    if identity and ownership:
+        stmt = apply_identity(stmt, identity, ownership)
+
+    if verbose:
+        short = " ".join(stmt.sql.split())
+        label = "WRITE" if stmt.is_write else "READ"
+        print(f"    [SIF {label}] {short[:120]}{'...' if len(short) > 120 else ''}")
+
+    result = execute_on_conn(conn, stmt.sql, stmt.is_write, params=stmt.params)
+    query_log.append({
+        "type": "sif", "operation": op,
+        "sql": stmt.sql, "params": stmt.params,
+        "is_write": stmt.is_write, "result": result,
+    })
+
+    if _is_db_error(result):
+        return "Database error: " + _db_error_text(result)
+
+    prior.append({"operation": op["op"], "entity": op.get("entity", ""), "result": result})
+    return None
+
+
+# ── Link / unlink execution ─────────────────────────────────────────────────
+
 
 def _execute_link_plan(
     op: dict, plan: LinkPlan, conn, verbose: bool,
 ) -> tuple[bool, str, dict | None]:
     """Execute a LinkPlan on an open transaction connection.
 
-    Returns (ok, message, log_entry). On failure, `ok` is False and
-    `message` is the error text already formatted for the agent — the
-    caller routes it through _format_with_failure.
+    Returns (ok, message, log_entry).
     """
-    # Resolve both endpoints to primary keys
     from_pk, err = _resolve_single_pk(conn, plan.from_table, plan.from_filters)
     if err:
         return False, f"{plan.op} from-side ({plan.from_table.class_name}): {err}", None
@@ -200,118 +186,103 @@ def _execute_link_plan(
     if err:
         return False, f"{plan.op} to-side ({plan.to_table.class_name}): {err}", None
 
-    # Check current link state
-    exists_sql = (
-        f"SELECT 1 FROM {plan.junction_table} "
-        f"WHERE {plan.from_fk_column} = :from_id AND {plan.to_fk_column} = :to_id LIMIT 1"
-    )
-    existing = execute_on_conn(
-        conn, exists_sql, is_write=False,
-        params={"from_id": from_pk, "to_id": to_pk},
-    )
-    if isinstance(existing, dict) and "error" in existing:
-        detail = existing.get("detail", "")
-        return (
-            False,
-            f"{plan.op} lookup failed: {existing.get('error')}{': ' + detail if detail else ''}",
-            None,
-        )
-    already_linked = len(existing) > 0
+    link_params = {"from_id": from_pk, "to_id": to_pk}
+    already_linked, err = _check_link_exists(plan, conn, link_params)
+    if err:
+        return False, f"{plan.op} lookup failed: {err}", None
 
     from_cls = plan.from_table.class_name
     to_cls = plan.to_table.class_name
 
     if plan.op == "link":
-        if already_linked:
-            msg = f"{from_cls} and {to_cls} are already linked via {plan.relation_name} — nothing to do."
-            return True, msg, {
-                "type": "sif",
-                "operation": op,
-                "sql": exists_sql,
-                "params": {"from_id": from_pk, "to_id": to_pk},
-                "is_write": False,
-                "result": {"success": True, "already_linked": True},
-            }
+        return _do_link(op, plan, conn, link_params, already_linked, from_cls, to_cls, verbose)
+    return _do_unlink(op, plan, conn, link_params, already_linked, from_cls, to_cls, verbose)
 
-        insert_sql = (
-            f"INSERT INTO {plan.junction_table} "
-            f"({plan.from_fk_column}, {plan.to_fk_column}) "
-            f"VALUES (:from_id, :to_id)"
-        )
-        if verbose:
-            print(f"    [SIF LINK] {insert_sql}")
-        result = execute_on_conn(
-            conn, insert_sql, is_write=True,
-            params={"from_id": from_pk, "to_id": to_pk},
-        )
-        log_entry = {
-            "type": "sif",
-            "operation": op,
-            "sql": insert_sql,
-            "params": {"from_id": from_pk, "to_id": to_pk},
-            "is_write": True,
-            "result": result,
+
+def _check_link_exists(
+    plan: LinkPlan, conn, params: dict,
+) -> tuple[bool, str | None]:
+    """Check whether a junction row already exists. Returns (exists, error_text)."""
+    sql = (
+        f"SELECT 1 FROM {plan.junction_table} "
+        f"WHERE {plan.from_fk_column} = :from_id AND {plan.to_fk_column} = :to_id LIMIT 1"
+    )
+    rows = execute_on_conn(conn, sql, is_write=False, params=params)
+    if _is_db_error(rows):
+        return False, _db_error_text(rows)
+    return len(rows) > 0, None
+
+
+def _do_link(
+    op: dict, plan: LinkPlan, conn, params: dict,
+    already_linked: bool, from_cls: str, to_cls: str, verbose: bool,
+) -> tuple[bool, str, dict | None]:
+    if already_linked:
+        return True, f"{from_cls} and {to_cls} are already linked via {plan.relation_name} — nothing to do.", {
+            "type": "sif", "operation": op,
+            "sql": "(exists check)", "params": params,
+            "is_write": False, "result": {"success": True, "already_linked": True},
         }
-        if isinstance(result, dict) and "error" in result:
-            err = result.get("error", "")
-            detail = result.get("detail", "")
-            return False, f"link failed: {err}{': ' + detail if detail else ''}", log_entry
-        return True, f"Linked {from_cls} and {to_cls} via {plan.relation_name}.", log_entry
 
-    # unlink
+    sql = (
+        f"INSERT INTO {plan.junction_table} "
+        f"({plan.from_fk_column}, {plan.to_fk_column}) "
+        f"VALUES (:from_id, :to_id)"
+    )
+    if verbose:
+        print(f"    [SIF LINK] {sql}")
+    result = execute_on_conn(conn, sql, is_write=True, params=params)
+    log_entry = {"type": "sif", "operation": op, "sql": sql,
+                 "params": params, "is_write": True, "result": result}
+
+    if _is_db_error(result):
+        return False, f"link failed: {_db_error_text(result)}", log_entry
+    return True, f"Linked {from_cls} and {to_cls} via {plan.relation_name}.", log_entry
+
+
+def _do_unlink(
+    op: dict, plan: LinkPlan, conn, params: dict,
+    already_linked: bool, from_cls: str, to_cls: str, verbose: bool,
+) -> tuple[bool, str, dict | None]:
     if not already_linked:
-        msg = f"{from_cls} and {to_cls} are not linked via {plan.relation_name} — nothing to do."
-        return True, msg, {
-            "type": "sif",
-            "operation": op,
-            "sql": exists_sql,
-            "params": {"from_id": from_pk, "to_id": to_pk},
-            "is_write": False,
-            "result": {"success": True, "already_unlinked": True},
+        return True, f"{from_cls} and {to_cls} are not linked via {plan.relation_name} — nothing to do.", {
+            "type": "sif", "operation": op,
+            "sql": "(exists check)", "params": params,
+            "is_write": False, "result": {"success": True, "already_unlinked": True},
         }
 
-    delete_sql = (
+    sql = (
         f"DELETE FROM {plan.junction_table} "
         f"WHERE {plan.from_fk_column} = :from_id AND {plan.to_fk_column} = :to_id"
     )
     if verbose:
-        print(f"    [SIF UNLINK] {delete_sql}")
-    result = execute_on_conn(
-        conn, delete_sql, is_write=True,
-        params={"from_id": from_pk, "to_id": to_pk},
-    )
-    log_entry = {
-        "type": "sif",
-        "operation": op,
-        "sql": delete_sql,
-        "params": {"from_id": from_pk, "to_id": to_pk},
-        "is_write": True,
-        "result": result,
-    }
-    if isinstance(result, dict) and "error" in result:
-        err = result.get("error", "")
-        detail = result.get("detail", "")
-        return False, f"unlink failed: {err}{': ' + detail if detail else ''}", log_entry
+        print(f"    [SIF UNLINK] {sql}")
+    result = execute_on_conn(conn, sql, is_write=True, params=params)
+    log_entry = {"type": "sif", "operation": op, "sql": sql,
+                 "params": params, "is_write": True, "result": result}
+
+    if _is_db_error(result):
+        return False, f"unlink failed: {_db_error_text(result)}", log_entry
     return True, f"Unlinked {from_cls} and {to_cls} via {plan.relation_name}.", log_entry
 
 
 def _resolve_single_pk(conn, table: TableMap, filters: dict) -> tuple[object, str | None]:
-    """Look up a row by filters and return (pk_value, None) or (None, error_text).
-
-    Returns an error when the filters do not match exactly one row — both
-    zero matches (missing) and multiple matches (ambiguous) are treated as
-    user-fixable, not raised.
-    """
+    """Look up a row by filters and return (pk_value, None) or (None, error_text)."""
     if not filters:
         return None, "no filters provided — cannot locate the target row"
+
+    # Accept ontology column names + physical PK/FK names (from identity scoping).
+    physical_cols = set(table.column_map.values()) if table.column_map else set()
+    valid = set(table.columns) | physical_cols | {table.primary_key}
 
     where_parts = []
     params: dict = {}
     for i, (col, val) in enumerate(filters.items()):
-        if col not in table.columns:
+        if col not in valid:
             return None, f"unknown filter field '{col}' on {table.class_name}"
+        phys = table.physical_column(col)
         pname = f"p{i}"
-        where_parts.append(f"{col} = :{pname}")
+        where_parts.append(f"{phys} = :{pname}")
         params[pname] = val
 
     sql = (
@@ -319,9 +290,8 @@ def _resolve_single_pk(conn, table: TableMap, filters: dict) -> tuple[object, st
         f"WHERE {' AND '.join(where_parts)} LIMIT 2"
     )
     rows = execute_on_conn(conn, sql, is_write=False, params=params)
-    if isinstance(rows, dict) and "error" in rows:
-        detail = rows.get("detail", "")
-        return None, f"lookup failed: {rows.get('error')}{': ' + detail if detail else ''}"
+    if _is_db_error(rows):
+        return None, f"lookup failed: {_db_error_text(rows)}"
     if len(rows) == 0:
         return None, f"no {table.class_name} matches filters {filters}"
     if len(rows) > 1:
@@ -329,19 +299,34 @@ def _resolve_single_pk(conn, table: TableMap, filters: dict) -> tuple[object, st
     return rows[0][table.primary_key], None
 
 
-# ── Result formatting ────────────────────────────────────────────────────────
+# ── DB error helpers ────────────────────────────────────────────────────────
+
+
+def _is_db_error(result) -> bool:
+    return isinstance(result, dict) and "error" in result
+
+
+def _db_error_text(result: dict) -> str:
+    text = result["error"]
+    if result.get("detail"):
+        text += f"\nDetail: {result['detail']}"
+    return text
+
+
+# ── Result formatting ───────────────────────────────────────────────────────
+
+
+def _format_validation_failure(errors: list[str]) -> str:
+    return (
+        "SIF validation failed (nothing was executed):\n"
+        + "\n".join(f"- {e}" for e in errors)
+        + "\n\nFix the operations and resubmit."
+    )
+
 
 def _format_with_failure(prior_results: list[dict], failed_idx: int, error_text: str) -> str:
-    """Report failing op + rollback notice so the agent can self-correct.
-
-    Prior successes within the same batch are rolled back by the surrounding
-    transaction, so we tell the agent exactly that — no 'partially applied'
-    state to reason about.
-    """
-    parts: list[str] = []
-    parts.append(f"Operation {failed_idx} FAILED:")
-    parts.append(error_text)
-    parts.append("")
+    """Report failing op + rollback notice so the agent can self-correct."""
+    parts = [f"Operation {failed_idx} FAILED:", error_text, ""]
     if prior_results:
         parts.append(
             f"All {len(prior_results)} earlier op(s) in this batch were rolled back — "
@@ -370,7 +355,6 @@ def _format_results(results: list[dict]) -> str:
                 if len(data) == 0:
                     parts.append(f"No {entity} records found.")
                 elif len(data) == 1 and len(data[0]) == 1:
-                    # Single aggregate value
                     key = list(data[0].keys())[0]
                     parts.append(f"{data[0][key]}")
                 else:
@@ -379,7 +363,6 @@ def _format_results(results: list[dict]) -> str:
                 parts.append(json.dumps(data, default=str))
 
         elif op == "action":
-            # Action results are already strings from the action function
             parts.append(str(data))
 
         elif op in ("link", "unlink"):

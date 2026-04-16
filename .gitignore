@@ -1,8 +1,8 @@
 # Config file with API keys and passwords
 config.ini
 
-# LLM-generated schema and seed data
-domains/*/_generated/
+# Generated schema, DDL, seed data (per data source)
+domains/*/data_sources/*/_generated/
 
 # Claude Code
 CLAUDE.md
@@ -20,3 +20,6 @@ venv/
 
 # IDEs
 .idea/
+
+# Debug logs
+logs/

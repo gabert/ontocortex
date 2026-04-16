@@ -12,8 +12,63 @@
 [anthropic]
 api_key = sk-ant-...your-key-here...
 
-[database]
-dbname = postgres
+# ---------------------------------------------------------------------------
+# LLM models.
+#
+# All three keys are required. No defaults — set each one explicitly.
+#
+#   chat       — used by the conversational agent at runtime
+#   seed_data  — used with `build_schema.py --seed` (demo data generation)
+#   analyzer   — used for post-mortem error analysis
+#
+# Schema generation (design_plan.py + build_schema.py) is fully deterministic
+# and does not use any LLM model.
+# ---------------------------------------------------------------------------
+
+[models]
+chat = claude-sonnet-4-6
+seed_data = claude-sonnet-4-6
+analyzer = claude-sonnet-4-6
+
+# ---------------------------------------------------------------------------
+# Chat agent settings.
+#
+# All keys are required. No defaults.
+# ---------------------------------------------------------------------------
+
+[chat]
+max_tokens = 8192
+max_retries = 3
+retry_delay = 5
+max_iterations = 20
+
+# ---------------------------------------------------------------------------
+# Architect pipeline settings (seed data generator).
+#
+# All keys are required. No defaults.
+# These settings are used by the seed data generator (build_schema.py --seed).
+# The schema builder itself is fully deterministic and does not use them.
+# ---------------------------------------------------------------------------
+
+[architect]
+max_tokens = 4096
+max_concurrency = 5
+sdk_max_retries = 5
+max_validation_attempts = 3
+rows_per_table = 10
+junction_rows = 5
+
+# ---------------------------------------------------------------------------
+# Data sources.
+#
+# Each [data_source:NAME] section defines connection details for a specific
+# store. The NAME must match the "store" value in a domain's domain.json.
+#
+# Every section must contain all five keys (dbname, user, password, host, port).
+# ---------------------------------------------------------------------------
+
+[data_source:student_loans_demo]
+dbname = student_loans_demo
 user = postgres
 password = postgres
 host = localhost

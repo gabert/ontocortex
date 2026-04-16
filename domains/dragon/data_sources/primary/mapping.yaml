@@ -1,0 +1,193 @@
+data_source: primary
+tables:
+  Acquisition:
+    iri: https://dragonhoard.example.org/ontology#Acquisition
+    table: drg_acquisitions
+    primary_key: drg_acquisition_id
+    columns:
+      acquisition_date:
+        iri: https://dragonhoard.example.org/ontology#acquisitionDate
+        column: acquisition_date
+      acquisition_method:
+        iri: https://dragonhoard.example.org/ontology#acquisitionMethod
+        column: acquisition_method
+      source_kingdom:
+        iri: https://dragonhoard.example.org/ontology#sourceKingdom
+        column: source_kingdom
+  Curse:
+    iri: https://dragonhoard.example.org/ontology#Curse
+    table: drg_curses
+    primary_key: drg_curse_id
+    columns:
+      curse_effect:
+        iri: https://dragonhoard.example.org/ontology#curseEffect
+        column: curse_effect
+      curse_is_active:
+        iri: https://dragonhoard.example.org/ontology#curseIsActive
+        column: curse_is_active
+      curse_name:
+        iri: https://dragonhoard.example.org/ontology#curseName
+        column: curse_name
+  Dragon:
+    iri: https://dragonhoard.example.org/ontology#Dragon
+    table: drg_dragons
+    primary_key: drg_dragon_id
+    columns:
+      age_class:
+        iri: https://dragonhoard.example.org/ontology#ageClass
+        column: age_class
+      dragon_name:
+        iri: https://dragonhoard.example.org/ontology#dragonName
+        column: dragon_name
+      estimated_age:
+        iri: https://dragonhoard.example.org/ontology#estimatedAge
+        column: estimated_age
+      species:
+        iri: https://dragonhoard.example.org/ontology#species
+        column: species
+      temperament:
+        iri: https://dragonhoard.example.org/ontology#temperament
+        column: temperament
+  Hero:
+    iri: https://dragonhoard.example.org/ontology#Hero
+    table: drg_heros
+    primary_key: drg_hero_id
+    columns:
+      hero_class:
+        iri: https://dragonhoard.example.org/ontology#heroClass
+        column: hero_class
+      hero_name:
+        iri: https://dragonhoard.example.org/ontology#heroName
+        column: hero_name
+      is_deceased:
+        iri: https://dragonhoard.example.org/ontology#isDeceased
+        column: is_deceased
+      threat_level:
+        iri: https://dragonhoard.example.org/ontology#threatLevel
+        column: threat_level
+  Hoard:
+    iri: https://dragonhoard.example.org/ontology#Hoard
+    table: drg_hoards
+    primary_key: drg_hoard_id
+    columns:
+      hoard_name:
+        iri: https://dragonhoard.example.org/ontology#hoardName
+        column: hoard_name
+      last_audit_date:
+        iri: https://dragonhoard.example.org/ontology#lastAuditDate
+        column: last_audit_date
+      total_estimated_value:
+        iri: https://dragonhoard.example.org/ontology#totalEstimatedValue
+        column: total_estimated_value
+  Incursion:
+    iri: https://dragonhoard.example.org/ontology#Incursion
+    table: drg_incursions
+    primary_key: drg_incursion_id
+    columns:
+      damage_to_lair:
+        iri: https://dragonhoard.example.org/ontology#damageToLair
+        column: damage_to_lair
+      incursion_date:
+        iri: https://dragonhoard.example.org/ontology#incursionDate
+        column: incursion_date
+      items_stolen:
+        iri: https://dragonhoard.example.org/ontology#itemsStolen
+        column: items_stolen
+      outcome:
+        iri: https://dragonhoard.example.org/ontology#outcome
+        column: outcome
+  Lair:
+    iri: https://dragonhoard.example.org/ontology#Lair
+    table: drg_lairs
+    primary_key: drg_lair_id
+    columns:
+      is_active:
+        iri: https://dragonhoard.example.org/ontology#isActive
+        column: is_active
+      lair_name:
+        iri: https://dragonhoard.example.org/ontology#lairName
+        column: lair_name
+      lair_type:
+        iri: https://dragonhoard.example.org/ontology#lairType
+        column: lair_type
+      region:
+        iri: https://dragonhoard.example.org/ontology#region
+        column: region
+  TreasureItem:
+    iri: https://dragonhoard.example.org/ontology#TreasureItem
+    table: drg_treasure_items
+    primary_key: drg_treasure_item_id
+    columns:
+      condition:
+        iri: https://dragonhoard.example.org/ontology#condition
+        column: condition
+      estimated_value:
+        iri: https://dragonhoard.example.org/ontology#estimatedValue
+        column: estimated_value
+      is_magical:
+        iri: https://dragonhoard.example.org/ontology#isMagical
+        column: is_magical
+      item_name:
+        iri: https://dragonhoard.example.org/ontology#itemName
+        column: item_name
+      item_type:
+        iri: https://dragonhoard.example.org/ontology#itemType
+        column: item_type
+relations:
+  acquiredVia:
+    iri: https://dragonhoard.example.org/ontology#acquiredVia
+    type: direct
+    fk_table: drg_treasure_items
+    fk_column: drg_acquisition_id
+    ref_table: drg_acquisitions
+    ref_column: drg_acquisition_id
+  conductedBy:
+    iri: https://dragonhoard.example.org/ontology#conductedBy
+    type: direct
+    fk_table: drg_incursions
+    fk_column: drg_hero_id
+    ref_table: drg_heros
+    ref_column: drg_hero_id
+  contains:
+    iri: https://dragonhoard.example.org/ontology#contains
+    type: direct
+    fk_table: drg_hoards
+    fk_column: drg_treasure_item_id
+    ref_table: drg_treasure_items
+    ref_column: drg_treasure_item_id
+  hasCurse:
+    iri: https://dragonhoard.example.org/ontology#hasCurse
+    type: direct
+    fk_table: drg_treasure_items
+    fk_column: drg_curse_id
+    ref_table: drg_curses
+    ref_column: drg_curse_id
+  occupies:
+    iri: https://dragonhoard.example.org/ontology#occupies
+    type: direct
+    fk_table: drg_dragons
+    fk_column: drg_lair_id
+    ref_table: drg_lairs
+    ref_column: drg_lair_id
+  owns:
+    iri: https://dragonhoard.example.org/ontology#owns
+    type: direct
+    fk_table: drg_dragons
+    fk_column: drg_hoard_id
+    ref_table: drg_hoards
+    ref_column: drg_hoard_id
+  storedIn:
+    iri: https://dragonhoard.example.org/ontology#storedIn
+    type: direct
+    fk_table: drg_hoards
+    fk_column: drg_lair_id
+    ref_table: drg_lairs
+    ref_column: drg_lair_id
+  targetedHoard:
+    iri: https://dragonhoard.example.org/ontology#targetedHoard
+    type: direct
+    fk_table: drg_incursions
+    fk_column: drg_hoard_id
+    ref_table: drg_hoards
+    ref_column: drg_hoard_id
+

@@ -1,20 +1,18 @@
 """Schema Builder — Phase 2 of the scaled architect pipeline.
 
-Per-module LLM calls that run in parallel. Each module receives a
-tight ontology slice and returns only data-column detail. The
-Reconciler (Phase 3) merges the results deterministically.
+Two modes:
 
-Why per-module: every hard structural decision — table set, PKs, FK
-placement, junction tables — is already pinned by the Planner. The
-Builder's job is narrow and embarrassingly parallel. See
-NOTES_builder_contract.md for the full input/output contract.
+**Deterministic (default):** Pure Python. Maps each ontology datatype
+property to a column definition using XSD type → logical type mapping
+and convention-based flags. No LLM call, no API key, instant.
 
-Concurrency is capped at 5 simultaneous calls (plenty for real
-domains, polite to the Anthropic API). Failures per module are
-surfaced as `ModuleBuildResult(ok=False)` rather than raised — the
-caller decides whether to retry, bail, or proceed. The Reconciler
-will refuse to merge a partial set, so retries must be complete
-before reconciliation.
+**LLM-assisted (opt-in via `build_schema.py --llm`):** Per-module LLM
+calls that run in parallel. Each module receives a tight ontology
+slice and the LLM returns data-column detail. Concurrency is capped
+(configurable in config.ini). Includes a validation feedback loop.
+
+Both modes produce the same `module_<name>.json` format the Reconciler
+(Phase 3) consumes. The Reconciler merges results deterministically.
 """
 
 from __future__ import annotations
@@ -31,19 +29,8 @@ from anthropic import APIStatusError, AsyncAnthropic
 
 from agentcore.architect.build_validation import collect_build_errors
 from agentcore.architect.reconciler import BUILDS_SUBDIR
+from agentcore.config import ArchitectConfig
 from agentcore.domain import DomainConfig
-
-_MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 4096
-_MAX_CONCURRENCY = 5
-
-# Anthropic SDK handles 429/529 transparently with exponential backoff
-# and `retry-after` awareness when we set max_retries on the client.
-# We also run a validation feedback loop on top — the LLM gets up to
-# _MAX_VALIDATION_ATTEMPTS tries to produce a response that passes
-# `collect_build_errors`. First attempt + 2 corrective re-prompts.
-_SDK_MAX_RETRIES = 5
-_MAX_VALIDATION_ATTEMPTS = 3
 
 Granularity = Literal["module", "table"]
 GRANULARITY_MODULE: Granularity = "module"
@@ -88,6 +75,71 @@ Return a single JSON object, no prose, no markdown fences:
   ]
 }
 """
+
+
+# ── XSD → logical type (deterministic builder) ─────────────────────────────
+
+_XSD_TO_LOGICAL: dict[str, str] = {
+    "string": "string",
+    "normalizedString": "string",
+    "token": "string",
+    "integer": "integer",
+    "int": "integer",
+    "long": "integer",
+    "short": "integer",
+    "nonNegativeInteger": "integer",
+    "positiveInteger": "integer",
+    "decimal": "decimal",
+    "float": "decimal",
+    "double": "decimal",
+    "boolean": "boolean",
+    "date": "date",
+    "dateTime": "datetime",
+    "time": "string",
+}
+
+
+def _range_to_logical_type(range_label: str) -> str:
+    """Map a range label (from _range_label) to a logical type.
+
+    Range labels come from ``_range_label`` and look like:
+    - XSD local names: "string", "integer", "decimal", "boolean", etc.
+    - Value set references: "value_set:LoanStatusValue"
+    - Empty/unknown: "" (falls back to "string")
+    """
+    if range_label.startswith("value_set:"):
+        return "string"
+    return _XSD_TO_LOGICAL.get(range_label, "string")
+
+
+def _build_module_deterministic(module_input: dict) -> dict:
+    """Pure-Python column inference — replaces the LLM ``_call_module``.
+
+    For each table in the module, emits one column per datatype property
+    with ``on_table`` matching that table. Type is derived mechanically
+    from the XSD range; flags use safe conventions:
+    - ``not_null=True``, ``required=True`` (most domain data is mandatory)
+    - ``unique=False`` (only business identifiers need uniqueness, and
+      that's better controlled via schema_overrides.yaml)
+    """
+    props_by_table: dict[str, list[dict]] = {}
+    for dp in module_input["ontology_slice"]["datatype_properties"]:
+        props_by_table.setdefault(dp["on_table"], []).append(dp)
+
+    tables_out: list[dict] = []
+    for table in module_input["tables"]:
+        columns: list[dict] = []
+        for dp in props_by_table.get(table["name"], []):
+            columns.append({
+                "name": dp["snake_name"],
+                "type": _range_to_logical_type(dp["range"]),
+                "not_null": True,
+                "required": True,
+                "unique": False,
+            })
+        tables_out.append({"name": table["name"], "columns": columns})
+
+    return {"module": module_input["module"], "tables": tables_out}
 
 
 class BuildError(RuntimeError):
@@ -296,6 +348,8 @@ async def _call_module(
     module_input: dict,
     sem: asyncio.Semaphore,
     verbose: bool,
+    llm_model: str,
+    arch_cfg: ArchitectConfig,
 ) -> dict:
     """Run the LLM call with a validation feedback loop.
 
@@ -321,11 +375,11 @@ async def _call_module(
     last_errors: list[str] = []
 
     async with sem:
-        for attempt in range(_MAX_VALIDATION_ATTEMPTS):
+        for attempt in range(arch_cfg.max_validation_attempts):
             try:
                 response = await client.messages.create(
-                    model=_MODEL,
-                    max_tokens=_MAX_TOKENS,
+                    model=llm_model,
+                    max_tokens=arch_cfg.max_tokens,
                     system=_SYSTEM_PROMPT,
                     messages=messages,
                 )
@@ -348,7 +402,7 @@ async def _call_module(
                 output = _extract_json(text)
             except BuildError as e:
                 last_errors = [str(e)]
-                if attempt == _MAX_VALIDATION_ATTEMPTS - 1:
+                if attempt == arch_cfg.max_validation_attempts - 1:
                     break
                 messages.append({"role": "assistant", "content": text})
                 messages.append({
@@ -370,7 +424,7 @@ async def _call_module(
                 return output
 
             last_errors = errors
-            if attempt == _MAX_VALIDATION_ATTEMPTS - 1:
+            if attempt == arch_cfg.max_validation_attempts - 1:
                 break
             if verbose:
                 print(
@@ -393,7 +447,7 @@ async def _call_module(
 
     raise BuildError(
         f"Module '{module_name}': build failed after "
-        f"{_MAX_VALIDATION_ATTEMPTS} attempts. Final issues: {last_errors}"
+        f"{arch_cfg.max_validation_attempts} attempts. Final issues: {last_errors}"
     )
 
 
@@ -403,13 +457,15 @@ async def build_modules_async(
     domain: DomainConfig,
     plan: dict,
     api_key: str,
+    arch_cfg: ArchitectConfig,
     *,
     granularity: Granularity = GRANULARITY_MODULE,
     client: AsyncAnthropic | None = None,
     model: dict | None = None,
-    concurrency: int = _MAX_CONCURRENCY,
+    concurrency: int | None = None,
     verbose: bool = True,
     force: bool = False,
+    llm_model: str,
 ) -> list[ModuleBuildResult]:
     """Fan out LLM calls according to `granularity`, then write one
     `module_<name>.json` per module. Returns one result per module
@@ -446,9 +502,10 @@ async def build_modules_async(
     if owns_client:
         # SDK handles 429/529 with exponential backoff + `retry-after`
         # when max_retries is set — no manual loop needed on our side.
-        client = AsyncAnthropic(api_key=api_key, max_retries=_SDK_MAX_RETRIES)
+        client = AsyncAnthropic(api_key=api_key, max_retries=arch_cfg.sdk_max_retries)
 
-    sem = asyncio.Semaphore(concurrency)
+    effective_concurrency = concurrency if concurrency is not None else arch_cfg.max_concurrency
+    sem = asyncio.Semaphore(effective_concurrency)
 
     def _write_module_file(name: str, tables: list[dict], plan_hash: str) -> Path:
         path = builds_dir / f"module_{name}.json"
@@ -479,7 +536,7 @@ async def build_modules_async(
             cached = _try_resume(name, plan_hash)
             if cached is not None:
                 return cached
-            output = await _call_module(client, payload, sem, verbose)
+            output = await _call_module(client, payload, sem, verbose, llm_model=llm_model, arch_cfg=arch_cfg)
             # _call_module already ran collect_build_errors — if we're
             # here, `output["tables"]` is present and structurally sound.
             path = _write_module_file(name, output["tables"], plan_hash)
@@ -509,7 +566,7 @@ async def build_modules_async(
         ) -> tuple[str, dict | None, str | None]:
             try:
                 payload = _build_input(name, [table_name], plan, model)
-                output = await _call_module(client, payload, sem, verbose)
+                output = await _call_module(client, payload, sem, verbose, llm_model=llm_model, arch_cfg=arch_cfg)
                 tables = output.get("tables") or []
                 if len(tables) != 1 or tables[0].get("name") != table_name:
                     raise BuildError(
@@ -556,17 +613,106 @@ def build_modules(
     domain: DomainConfig,
     plan: dict,
     api_key: str,
+    arch_cfg: ArchitectConfig,
     *,
     granularity: Granularity = GRANULARITY_MODULE,
     client: AsyncAnthropic | None = None,
     model: dict | None = None,
-    concurrency: int = _MAX_CONCURRENCY,
+    concurrency: int | None = None,
     verbose: bool = True,
     force: bool = False,
+    llm_model: str,
 ) -> list[ModuleBuildResult]:
     """Synchronous wrapper around build_modules_async for CLI use."""
     return asyncio.run(build_modules_async(
-        domain, plan, api_key,
+        domain, plan, api_key, arch_cfg,
         granularity=granularity, client=client, model=model, force=force,
-        concurrency=concurrency, verbose=verbose,
+        concurrency=concurrency, verbose=verbose, llm_model=llm_model,
     ))
+
+
+# ── Deterministic builder (no LLM) ─────────────────────────────────────────
+
+def build_modules_deterministic(
+    domain: DomainConfig,
+    plan: dict,
+    *,
+    model: dict | None = None,
+    verbose: bool = True,
+    force: bool = False,
+) -> list[ModuleBuildResult]:
+    """Build all modules deterministically — no LLM, no API key.
+
+    For each module, maps ontology datatype properties to column
+    definitions using XSD type → logical type mapping and convention-
+    based flags. Produces the same ``module_<name>.json`` files the
+    Reconciler expects, with plan-hash caching so unchanged modules
+    are skipped on rerun.
+    """
+    if model is None:
+        model = domain.ontology_model
+
+    builds_dir = domain.generated_dir / BUILDS_SUBDIR
+    builds_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[ModuleBuildResult] = []
+
+    for module in plan["modules"]:
+        name = module["name"]
+        try:
+            payload = _build_module_input(module, plan, model)
+            plan_hash = _module_plan_hash(payload)
+
+            # Resume from cache if plan slice is unchanged.
+            if not force:
+                path = builds_dir / f"module_{name}.json"
+                cached = _load_cached_build(path, plan_hash)
+                if cached is not None:
+                    if verbose:
+                        print(f"  [{name}] cached — plan slice unchanged, skipping")
+                    results.append(ModuleBuildResult(
+                        name=name, ok=True, path=path, skipped=True,
+                    ))
+                    continue
+
+            output = _build_module_deterministic(payload)
+
+            # Sanity check: run the same validation the LLM path uses.
+            expected_tables = [t["name"] for t in payload["tables"]]
+            accepted_cols = _accepted_columns_by_table(payload)
+            errors = collect_build_errors(
+                output,
+                expected_table_names=expected_tables,
+                accepted_columns_by_table=accepted_cols,
+            )
+            if errors:
+                results.append(ModuleBuildResult(
+                    name=name, ok=False,
+                    error=f"Deterministic build validation failed: {errors}",
+                ))
+                continue
+
+            # Write module file.
+            path = builds_dir / f"module_{name}.json"
+            file_payload = {
+                "module": name,
+                "plan_hash": plan_hash,
+                "tables": output["tables"],
+            }
+            path.write_text(
+                json.dumps(file_payload, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            if verbose:
+                n_cols = sum(len(t.get("columns", [])) for t in output["tables"])
+                n_tables = len(output["tables"])
+                print(f"  [{name}] {n_tables} table(s), {n_cols} column(s)")
+
+            results.append(ModuleBuildResult(name=name, ok=True, path=path))
+
+        except Exception as e:
+            results.append(ModuleBuildResult(name=name, ok=False, error=str(e)))
+
+    return results

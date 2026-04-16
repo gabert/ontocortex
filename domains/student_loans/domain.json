@@ -1,10 +1,17 @@
 {
   "name": "Student Loans Advisor",
   "description": "Student-loan portfolio management: balances, repayments, cosigners, and borrower support",
-  "database_name": "student_loans_demo",
   "ontology": "student_loans_ontology.ttl",
-  "business_rules": "student_loans_rules.yaml",
+  "business_rules": "student_loans.rules",
   "system_prompt": "student_loans_prompt.txt",
+  "identity_entity": "Student",
+  "data_sources": {
+    "primary": {
+      "store": "student_loans_demo",
+      "source_dir": "data_sources/primary",
+      "mapping": "mapping.yaml"
+    }
+  },
   "generated": {
     "ontology_compact": "student_loans_ontology_compact.owl",
     "schema_plan": "student_loans_schema_plan.yaml",

@@ -4,8 +4,10 @@ import sys
 
 from agentcore.pipeline import AgentPipeline
 from agentcore.config import ConfigError, load_config
+from agentcore.database import execute_query
 from agentcore.domain import list_domains, load_domain
 from agentcore.domain.install import db_config_for_domain, database_ready, install_domain
+from agentcore.identity import IdentityContext
 
 
 def _error_hint(e: Exception) -> str:
@@ -29,6 +31,54 @@ def _error_hint(e: Exception) -> str:
         return f"database error ({name}: {e})"
 
     return f"{name}: {e}"
+
+
+def _pick_identity(db_cfg, domain) -> tuple[IdentityContext | None, dict | None]:
+    """Let the user pick an identity from existing rows, or skip."""
+    if not domain.identity_entity:
+        return None, None
+
+    from agentcore.sif.mapping import build_schema_map_from_mapping
+    if not domain.has_mapping:
+        return None, None
+    smap = build_schema_map_from_mapping(domain.ontology_model, domain.mapping_data)
+    table = smap.tables.get(domain.identity_entity)
+    if not table:
+        return None, None
+
+    rows = execute_query(
+        db_cfg,
+        f"SELECT * FROM {table.table_name} ORDER BY {table.primary_key} LIMIT 20",
+    )
+    if not rows or isinstance(rows, dict):
+        print(f"  No {domain.identity_entity} records found — running without identity scoping.")
+        return None, None
+
+    print(f"\n  Select a {domain.identity_entity} to log in as:")
+    for i, row in enumerate(rows, 1):
+        # Show PK + first few data columns for identification
+        pk_val = row[table.primary_key]
+        display_cols = [f"{k}={v}" for k, v in row.items()
+                        if k != table.primary_key and v is not None][:3]
+        print(f"    {i}. [{pk_val}] {', '.join(display_cols)}")
+    print(f"    0. Skip (no identity scoping)")
+
+    while True:
+        try:
+            choice = input("  Choice: ").strip()
+            if not choice:
+                continue
+            idx = int(choice)
+            if idx == 0:
+                return None, None
+            if 1 <= idx <= len(rows):
+                row = rows[idx - 1]
+                pk_val = row[table.primary_key]
+                print(f"  Logged in as {domain.identity_entity} #{pk_val}\n")
+                return IdentityContext(user_id=pk_val), row
+            print(f"  Enter 0-{len(rows)}")
+        except (ValueError, KeyboardInterrupt):
+            return None, None
 
 
 def _print_banner(domain_name: str) -> None:
@@ -57,6 +107,7 @@ def main() -> None:
         print(f"ERROR: No domains found in {domains_dir}")
         sys.exit(1)
 
+    identity = None
     initial = sys.argv[1] if len(sys.argv) > 1 else None
     if initial and initial not in available:
         print(f"ERROR: Unknown domain '{initial}'. Available: {', '.join(available)}")
@@ -69,11 +120,14 @@ def main() -> None:
 
     if domain:
         db_cfg = db_config_for_domain(config, domain)
-        if not database_ready(db_cfg, domain.database_name):
-            print(f"Database '{domain.database_name}' not found. Installing...")
+        if not database_ready(db_cfg, domain.store):
+            print(f"Database '{domain.store}' not found. Installing...")
             db_cfg = install_domain(config, domain)
         config.database = db_cfg
-        agent = AgentPipeline(config, domain)
+        identity, user_data = _pick_identity(db_cfg, domain)
+        agent = AgentPipeline(config, domain, identity=identity)
+        if user_data:
+            agent.set_user_context(user_data)
         _print_banner(domain.name)
         print(f"Agent: Hello! I'm your {domain.name.lower()} assistant.\n"
               "       How can I help you today?\n")
@@ -129,14 +183,17 @@ def main() -> None:
                 domain = load_domain(target, domains_dir)
                 db_cfg = db_config_for_domain(config, domain)
 
-                if database_ready(db_cfg, domain.database_name):
+                if database_ready(db_cfg, domain.store):
                     print(f"\nSwitching to {domain.name}...")
                 else:
-                    print(f"\nDatabase '{domain.database_name}' not found. Installing {domain.name}...")
+                    print(f"\nDatabase '{domain.store}' not found. Installing {domain.name}...")
                     db_cfg = install_domain(config, domain)
 
                 config.database = db_cfg
-                agent = AgentPipeline(config, domain)
+                identity, user_data = _pick_identity(db_cfg, domain)
+                agent = AgentPipeline(config, domain, identity=identity)
+                if user_data:
+                    agent.set_user_context(user_data)
                 _print_banner(domain.name)
                 print(f"Agent: Hello! I'm your {domain.name.lower()} assistant.\n"
                       "       How can I help you today?\n")
@@ -151,7 +208,10 @@ def main() -> None:
                 print(f"\nReinstalling {domain.name}...")
                 db_cfg = install_domain(config, domain)
                 config.database = db_cfg
-                agent = AgentPipeline(config, domain)
+                identity, user_data = _pick_identity(db_cfg, domain)
+                agent = AgentPipeline(config, domain, identity=identity)
+                if user_data:
+                    agent.set_user_context(user_data)
                 _print_banner(domain.name)
                 print(f"Agent: {domain.name} reinstalled. Fresh session ready.\n")
                 continue

@@ -1,0 +1,87 @@
+=== TREATMENT PRICING ===
+
+Standard treatment rates (EUR):
+- Examination: 45 (general physical; exotic pets may be 55)
+- Vaccination: 35 (single vaccine -- Nobivac DHPPi+L4, Purevax RCP, Filavac)
+- Surgery minor: 250 (under sedation -- foreign body, abscess, small mass)
+- Surgery major: 600 (under general anesthesia -- orthopedic, splenectomy, complex GI)
+- Dental cleaning: 120 (full scaling and polishing under sedation)
+- Dental extraction: 85 per tooth (multiple extractions may be discounted)
+- Blood work: 60 (CBC and biochemistry panel)
+- Urinalysis: 40 (complete with sediment exam)
+- X-ray: 80 per view (two views are standard for most diagnostics)
+- Deworming: 25 (oral or injectable antiparasitic)
+- Grooming: 40 (nail trim, ear cleaning, coat brushing)
+- Emergency triage: 95 (intake assessment and stabilization, on top of treatments)
+
+
+=== EMERGENCY SURCHARGE ===
+
+Emergency visits outside regular hours (Mon-Fri 8:00-18:00) carry a 50%
+surcharge on all treatment costs. The surcharge is already factored into
+individual treatment costs when recorded -- do NOT apply it again at the
+invoice level.
+
+
+=== DISCOUNTS ===
+
+Discounts are applied at the invoice level, not per treatment.
+
+Multi-pet discount: 10% off the invoice subtotal when the owner has 2 or
+more pets registered at the clinic.
+
+Senior pet discount: 5% off the invoice subtotal when the pet is 10 years
+or older at the time of the appointment. Calculate age from date_of_birth
+relative to the appointment date.
+
+Discounts do NOT stack. If both apply, use whichever gives the larger
+discount amount.
+
+Invoice formula:
+  subtotal = sum of all treatment costs for the appointment
+  discount = the larger of multi-pet or senior-pet discount (if eligible)
+  final_amount = subtotal - discount
+
+
+=== APPOINTMENT POLICIES ===
+
+Default durations (minutes):
+- Examination: 30
+- Vaccination: 20
+- Dental cleaning: 60
+- Surgery minor: 90
+- Surgery major: 180
+- Emergency triage: 45
+
+Use these when scheduling unless the veterinarian requests otherwise.
+
+Scheduling: appointments can be booked up to 90 days in advance.
+
+Cancellation: less than 24 hours notice incurs a 20 EUR fee. No-shows are
+also charged 20 EUR. Record as a separate invoice.
+
+
+=== VACCINATION SCHEDULE ===
+
+Dogs:
+- DHPPi (Distemper, Hepatitis, Parvo, Parainfluenza): first dose at 8 weeks, booster at 12 weeks, then annually
+- Leptospirosis (L4): first dose at 8 weeks, booster at 12 weeks, then annually
+- Rabies: first dose at 12 weeks, booster every 3 years
+
+Cats:
+- RCP (Rhinotracheitis, Calicivirus, Panleukopenia): first dose at 8 weeks, booster at 12 weeks, then annually
+- Rabies: first dose at 12 weeks, booster every 3 years
+
+Rabbits:
+- Myxomatosis + RHD (Filavac): first dose at 10 weeks, booster annually
+
+
+=== PAYMENT TERMS ===
+
+Invoices are due within 14 days of the appointment. After 30 days, status
+changes to 'overdue'.
+
+Emergency treatments must be paid before discharge or within 7 days with
+prior arrangement.
+
+Accepted methods: cash, credit card, bank transfer.

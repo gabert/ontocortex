@@ -38,16 +38,8 @@ import yaml
 from anthropic import APIStatusError, AsyncAnthropic
 
 from agentcore.architect.sql_text import read_paren_group, split_top_level
+from agentcore.config import ArchitectConfig
 from agentcore.domain import DomainConfig
-
-_MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 4096
-_MAX_CONCURRENCY = 5
-_SDK_MAX_RETRIES = 5
-_MAX_VALIDATION_ATTEMPTS = 3
-
-DEFAULT_ROWS_PER_TABLE = 10
-DEFAULT_JUNCTION_ROWS = 5
 
 
 _SYSTEM_PROMPT = """\
@@ -330,6 +322,8 @@ async def _call_entity(
     payload: dict,
     sem: asyncio.Semaphore,
     verbose: bool,
+    llm_model: str,
+    arch_cfg: ArchitectConfig,
 ) -> str:
     """LLM call for one entity table with validation feedback loop."""
     user_message = yaml.safe_dump(
@@ -346,11 +340,11 @@ async def _call_entity(
     last_errors: list[str] = []
 
     async with sem:
-        for attempt in range(_MAX_VALIDATION_ATTEMPTS):
+        for attempt in range(arch_cfg.max_validation_attempts):
             try:
                 response = await client.messages.create(
-                    model=_MODEL,
-                    max_tokens=_MAX_TOKENS,
+                    model=llm_model,
+                    max_tokens=arch_cfg.max_tokens,
                     system=_SYSTEM_PROMPT,
                     messages=messages,
                 )
@@ -377,7 +371,7 @@ async def _call_entity(
                 return sql
 
             last_errors = errors
-            if attempt == _MAX_VALIDATION_ATTEMPTS - 1:
+            if attempt == arch_cfg.max_validation_attempts - 1:
                 break
             if verbose:
                 print(
@@ -398,7 +392,7 @@ async def _call_entity(
 
     raise RuntimeError(
         f"Seed failed for '{table_name}' after "
-        f"{_MAX_VALIDATION_ATTEMPTS} attempts. Final issues: {last_errors}"
+        f"{arch_cfg.max_validation_attempts} attempts. Final issues: {last_errors}"
     )
 
 
@@ -408,20 +402,26 @@ async def seed_schema_async(
     domain: DomainConfig,
     schema: dict,
     api_key: str,
+    arch_cfg: ArchitectConfig,
     *,
-    rows_per_table: int = DEFAULT_ROWS_PER_TABLE,
-    junction_rows: int = DEFAULT_JUNCTION_ROWS,
+    rows_per_table: int | None = None,
+    junction_rows: int | None = None,
     client: AsyncAnthropic | None = None,
-    concurrency: int = _MAX_CONCURRENCY,
+    concurrency: int | None = None,
     verbose: bool = True,
+    llm_model: str,
 ) -> tuple[str, list[SeedResult]]:
     """Generate seed SQL for every table in `schema`. Returns the full
     SQL text (ordered by `creation_order`) and one `SeedResult` per
     entity table.
     """
+    rows_per_table = rows_per_table if rows_per_table is not None else arch_cfg.rows_per_table
+    junction_rows = junction_rows if junction_rows is not None else arch_cfg.junction_rows
+    effective_concurrency = concurrency if concurrency is not None else arch_cfg.max_concurrency
+
     owns_client = client is None
     if owns_client:
-        client = AsyncAnthropic(api_key=api_key, max_retries=_SDK_MAX_RETRIES)
+        client = AsyncAnthropic(api_key=api_key, max_retries=arch_cfg.sdk_max_retries)
 
     tables_by_name = {t["name"]: t for t in schema["tables"]}
     lookup_codes = _collect_lookup_codes(schema)
@@ -451,7 +451,7 @@ async def seed_schema_async(
         else:
             entity_tables.append(t)
 
-    sem = asyncio.Semaphore(concurrency)
+    sem = asyncio.Semaphore(effective_concurrency)
 
     async def seed_one(table: dict) -> SeedResult:
         name = table["name"]
@@ -459,7 +459,7 @@ async def seed_schema_async(
             payload = _build_entity_input(
                 table, parent_pk_ranges, rows_per_table
             )
-            sql = await _call_entity(client, payload, sem, verbose)
+            sql = await _call_entity(client, payload, sem, verbose, llm_model=llm_model, arch_cfg=arch_cfg)
             return SeedResult(
                 name=name, ok=True,
                 sql=f"-- {name}\n{sql}\n",
@@ -504,21 +504,24 @@ def seed_schema(
     domain: DomainConfig,
     schema: dict,
     api_key: str,
+    arch_cfg: ArchitectConfig,
     *,
-    rows_per_table: int = DEFAULT_ROWS_PER_TABLE,
-    junction_rows: int = DEFAULT_JUNCTION_ROWS,
+    rows_per_table: int | None = None,
+    junction_rows: int | None = None,
     client: AsyncAnthropic | None = None,
-    concurrency: int = _MAX_CONCURRENCY,
+    concurrency: int | None = None,
     verbose: bool = True,
+    llm_model: str,
 ) -> tuple[str, list[SeedResult]]:
     """Synchronous wrapper for CLI use."""
     return asyncio.run(seed_schema_async(
-        domain, schema, api_key,
+        domain, schema, api_key, arch_cfg,
         rows_per_table=rows_per_table,
         junction_rows=junction_rows,
         client=client,
         concurrency=concurrency,
         verbose=verbose,
+        llm_model=llm_model,
     ))
 
 

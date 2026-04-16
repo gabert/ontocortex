@@ -59,14 +59,14 @@ _JUNCTION_KEYWORDS = (
 
 
 def _load_overrides(domain: DomainConfig) -> dict:
-    """Load schema_overrides.yaml from the domain directory if present.
+    """Load overrides.yaml from the data source directory if present.
 
     Returns an empty dict if the file doesn't exist. Fails fast on
     unknown top-level keys — silent typos are the #1 override footgun.
     Reference-existence checks against the ontology model happen later
     in `_validate_overrides` once the model is available.
     """
-    override_path = domain.ontology_path.parent / "schema_overrides.yaml"
+    override_path = domain.overrides_path
     if not override_path.exists():
         return {}
     data = yaml.safe_load(override_path.read_text(encoding="utf-8")) or {}

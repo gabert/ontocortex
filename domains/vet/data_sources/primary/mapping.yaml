@@ -1,0 +1,216 @@
+data_source: primary
+tables:
+  Appointment:
+    iri: https://vetclinic.example.org/ontology#Appointment
+    table: vet_appointments
+    primary_key: vet_appointment_id
+    columns:
+      appointment_date:
+        iri: https://vetclinic.example.org/ontology#appointmentDate
+        column: appointment_date
+      appointment_status:
+        iri: https://vetclinic.example.org/ontology#appointmentStatus
+        column: appointment_status
+      duration_minutes:
+        iri: https://vetclinic.example.org/ontology#durationMinutes
+        column: duration_minutes
+      is_emergency:
+        iri: https://vetclinic.example.org/ontology#isEmergency
+        column: is_emergency
+      reason:
+        iri: https://vetclinic.example.org/ontology#reason
+        column: reason
+  Invoice:
+    iri: https://vetclinic.example.org/ontology#Invoice
+    table: vet_invoices
+    primary_key: vet_invoice_id
+    columns:
+      discount:
+        iri: https://vetclinic.example.org/ontology#discount
+        column: discount
+      final_amount:
+        iri: https://vetclinic.example.org/ontology#finalAmount
+        column: final_amount
+      payment_date:
+        iri: https://vetclinic.example.org/ontology#paymentDate
+        column: payment_date
+      payment_method:
+        iri: https://vetclinic.example.org/ontology#paymentMethod
+        column: payment_method
+      payment_status:
+        iri: https://vetclinic.example.org/ontology#paymentStatus
+        column: payment_status
+      subtotal:
+        iri: https://vetclinic.example.org/ontology#subtotal
+        column: subtotal
+  MedicalRecord:
+    iri: https://vetclinic.example.org/ontology#MedicalRecord
+    table: vet_medical_records
+    primary_key: vet_medical_record_id
+    columns:
+      condition:
+        iri: https://vetclinic.example.org/ontology#condition
+        column: condition
+      is_chronic:
+        iri: https://vetclinic.example.org/ontology#isChronic
+        column: is_chronic
+      record_date:
+        iri: https://vetclinic.example.org/ontology#recordDate
+        column: record_date
+      record_description:
+        iri: https://vetclinic.example.org/ontology#recordDescription
+        column: record_description
+  Owner:
+    iri: https://vetclinic.example.org/ontology#Owner
+    table: vet_owners
+    primary_key: vet_owner_id
+    columns:
+      address:
+        iri: https://vetclinic.example.org/ontology#address
+        column: address
+      email:
+        iri: https://vetclinic.example.org/ontology#email
+        column: email
+      first_name:
+        iri: https://vetclinic.example.org/ontology#firstName
+        column: first_name
+      last_name:
+        iri: https://vetclinic.example.org/ontology#lastName
+        column: last_name
+      phone:
+        iri: https://vetclinic.example.org/ontology#phone
+        column: phone
+  Pet:
+    iri: https://vetclinic.example.org/ontology#Pet
+    table: vet_pets
+    primary_key: vet_pet_id
+    columns:
+      breed:
+        iri: https://vetclinic.example.org/ontology#breed
+        column: breed
+      chip_number:
+        iri: https://vetclinic.example.org/ontology#chipNumber
+        column: chip_number
+      date_of_birth:
+        iri: https://vetclinic.example.org/ontology#dateOfBirth
+        column: date_of_birth
+      is_neutered:
+        iri: https://vetclinic.example.org/ontology#isNeutered
+        column: is_neutered
+      pet_name:
+        iri: https://vetclinic.example.org/ontology#petName
+        column: pet_name
+      weight_kg:
+        iri: https://vetclinic.example.org/ontology#weightKg
+        column: weight_kg
+  Species:
+    iri: https://vetclinic.example.org/ontology#Species
+    table: vet_species
+    primary_key: vet_species_id
+    columns:
+      life_expectancy_years:
+        iri: https://vetclinic.example.org/ontology#lifeExpectancyYears
+        column: life_expectancy_years
+      species_name:
+        iri: https://vetclinic.example.org/ontology#speciesName
+        column: species_name
+      typical_weight_max_kg:
+        iri: https://vetclinic.example.org/ontology#typicalWeightMaxKg
+        column: typical_weight_max_kg
+      typical_weight_min_kg:
+        iri: https://vetclinic.example.org/ontology#typicalWeightMinKg
+        column: typical_weight_min_kg
+  Treatment:
+    iri: https://vetclinic.example.org/ontology#Treatment
+    table: vet_treatments
+    primary_key: vet_treatment_id
+    columns:
+      cost:
+        iri: https://vetclinic.example.org/ontology#cost
+        column: cost
+      dosage:
+        iri: https://vetclinic.example.org/ontology#dosage
+        column: dosage
+      medication:
+        iri: https://vetclinic.example.org/ontology#medication
+        column: medication
+      treatment_notes:
+        iri: https://vetclinic.example.org/ontology#treatmentNotes
+        column: treatment_notes
+      treatment_type:
+        iri: https://vetclinic.example.org/ontology#treatmentType
+        column: treatment_type
+  Veterinarian:
+    iri: https://vetclinic.example.org/ontology#Veterinarian
+    table: vet_veterinarians
+    primary_key: vet_veterinarian_id
+    columns:
+      email:
+        iri: https://vetclinic.example.org/ontology#email
+        column: email
+      first_name:
+        iri: https://vetclinic.example.org/ontology#firstName
+        column: first_name
+      last_name:
+        iri: https://vetclinic.example.org/ontology#lastName
+        column: last_name
+      license_number:
+        iri: https://vetclinic.example.org/ontology#licenseNumber
+        column: license_number
+      phone:
+        iri: https://vetclinic.example.org/ontology#phone
+        column: phone
+      specialization:
+        iri: https://vetclinic.example.org/ontology#specialization
+        column: specialization
+relations:
+  appointmentForPet:
+    iri: https://vetclinic.example.org/ontology#appointmentForPet
+    type: direct
+    fk_table: vet_pets
+    fk_column: vet_appointment_id
+    ref_table: vet_appointments
+    ref_column: vet_appointment_id
+  appointmentWithVet:
+    iri: https://vetclinic.example.org/ontology#appointmentWithVet
+    type: direct
+    fk_table: vet_appointments
+    fk_column: vet_veterinarian_id
+    ref_table: vet_veterinarians
+    ref_column: vet_veterinarian_id
+  hasInvoice:
+    iri: https://vetclinic.example.org/ontology#hasInvoice
+    type: direct
+    fk_table: vet_appointments
+    fk_column: vet_invoice_id
+    ref_table: vet_invoices
+    ref_column: vet_invoice_id
+  hasMedicalRecord:
+    iri: https://vetclinic.example.org/ontology#hasMedicalRecord
+    type: direct
+    fk_table: vet_pets
+    fk_column: vet_medical_record_id
+    ref_table: vet_medical_records
+    ref_column: vet_medical_record_id
+  hasTreatment:
+    iri: https://vetclinic.example.org/ontology#hasTreatment
+    type: direct
+    fk_table: vet_appointments
+    fk_column: vet_treatment_id
+    ref_table: vet_treatments
+    ref_column: vet_treatment_id
+  isSpecies:
+    iri: https://vetclinic.example.org/ontology#isSpecies
+    type: direct
+    fk_table: vet_pets
+    fk_column: vet_species_id
+    ref_table: vet_species
+    ref_column: vet_species_id
+  ownsPet:
+    iri: https://vetclinic.example.org/ontology#ownsPet
+    type: direct
+    fk_table: vet_owners
+    fk_column: vet_pet_id
+    ref_table: vet_pets
+    ref_column: vet_pet_id
+

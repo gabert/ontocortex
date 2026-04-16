@@ -46,7 +46,7 @@ def test_student_loans_matches_golden(tmp_path, request):
 
     design_plan(domain)
 
-    actual = (staging / "_generated" / "student_loans_schema_plan.yaml").read_text(encoding="utf-8")
+    actual = (staging / "data_sources" / "primary" / "_generated" / "student_loans_schema_plan.yaml").read_text(encoding="utf-8")
     golden_path = GOLDEN_DIR / "student_loans_schema_plan.yaml"
 
     if request.config.getoption("--update-golden", default=False):

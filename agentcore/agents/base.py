@@ -14,18 +14,19 @@ from datetime import datetime
 
 from anthropic import Anthropic, APIStatusError
 
-_MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 8192
-_MAX_RETRIES = 3
-_RETRY_DELAY = 5  # seconds
+from agentcore.config import ChatConfig
 
 
 class BaseAgent:
     """Shared LLM call infrastructure. Not instantiated directly."""
 
-    def __init__(self, client: Anthropic, verbose: bool = True) -> None:
+    def __init__(
+        self, client: Anthropic, chat_cfg: ChatConfig, verbose: bool = True, *, model: str,
+    ) -> None:
         self.client = client
+        self.chat_cfg = chat_cfg
         self.verbose = verbose
+        self.model = model
 
     def _call_api(
         self,
@@ -52,20 +53,22 @@ class BaseAgent:
         now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
         system = [system_block, {"type": "text", "text": f"Current date and time: {now}"}]
 
-        kwargs = dict(model=_MODEL, max_tokens=_MAX_TOKENS, system=system, messages=messages)
+        kwargs = dict(model=self.model, max_tokens=self.chat_cfg.max_tokens, system=system, messages=messages)
         if tools:
             kwargs["tools"] = tools
 
-        for attempt in range(1, _MAX_RETRIES + 1):
+        max_retries = self.chat_cfg.max_retries
+        retry_delay = self.chat_cfg.retry_delay
+        for attempt in range(1, max_retries + 1):
             try:
                 response = self.client.messages.create(**kwargs)
                 self._log_usage(response)
                 return response
             except APIStatusError as e:
-                if e.status_code in (429, 529) and attempt < _MAX_RETRIES:
-                    delay = _RETRY_DELAY * attempt
+                if e.status_code in (429, 529) and attempt < max_retries:
+                    delay = retry_delay * attempt
                     if self.verbose:
-                        print(f"    [API] {e.status_code} — retrying in {delay}s ({attempt}/{_MAX_RETRIES})")
+                        print(f"    [API] {e.status_code} — retrying in {delay}s ({attempt}/{max_retries})")
                     time.sleep(delay)
                 else:
                     raise

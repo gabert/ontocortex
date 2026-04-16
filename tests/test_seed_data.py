@@ -23,6 +23,16 @@ from agentcore.architect.seed_data import (
     _validate_entity_sql,
     seed_schema,
 )
+from agentcore.config import ArchitectConfig
+
+_TEST_ARCH_CFG = ArchitectConfig(
+    max_tokens=4096,
+    max_concurrency=5,
+    sdk_max_retries=5,
+    max_validation_attempts=3,
+    rows_per_table=10,
+    junction_rows=5,
+)
 
 
 # Minimal reconciled schema — 2 entity tables, 1 junction, 1 lookup.
@@ -257,9 +267,10 @@ def test_seed_schema_happy_path(tmp_path):
     sql, results = seed_schema(
         _FakeDomain(),  # type: ignore[arg-type]
         schema,
-        api_key="unused",
+        api_key="unused", arch_cfg=_TEST_ARCH_CFG,
         client=fake,
         verbose=False,
+        llm_model="test",
     )
 
     assert all(r.ok for r in results), [r.error for r in results if not r.ok]
@@ -309,9 +320,10 @@ def test_seed_schema_retries_on_wrong_table(tmp_path):
     sql, results = seed_schema(
         _FakeDomain(),  # type: ignore[arg-type]
         schema,
-        api_key="unused",
+        api_key="unused", arch_cfg=_TEST_ARCH_CFG,
         client=fake,
         verbose=False,
+        llm_model="test",
     )
 
     assert all(r.ok for r in results)

@@ -87,7 +87,8 @@ def main() -> None:
 
     print("\n" + "=" * 60)
     print(f"  Done. Plan saved to:")
-    print(f"    {domain.dir_name}/_generated/{plan_file}")
+    source_rel = domain.source_dir.relative_to(domain.domain_dir)
+    print(f"    {domain.dir_name}/{source_rel}/_generated/{plan_file}")
     print("=" * 60)
 
 

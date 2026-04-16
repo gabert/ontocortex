@@ -2,19 +2,13 @@
 CLI: Phase 2 + 3 of the scaled architect pipeline.
 
 Given an existing schema plan (from `scripts/design_plan.py`), run the
-Builder in parallel, then the deterministic Reconciler, then render
-the resulting logical schema as PostgreSQL DDL.
+deterministic Builder, then the Reconciler, then render the resulting
+logical schema as PostgreSQL DDL. No LLM call, no API key needed.
 
 Usage:
-    python scripts/build_schema.py                            # pick domain interactively
-    python scripts/build_schema.py student_loans              # build for specific domain
-    python scripts/build_schema.py student_loans --table      # per-table parallelism
-    python scripts/build_schema.py big_domain --table -c 20   # with concurrency 20
-
-Options:
-    --module             Per-module LLM calls (default; one call per module)
-    --table              Per-table LLM calls (one call per table; use for large domains)
-    -c N, --concurrency  Max simultaneous LLM calls (default 5)
+    python scripts/build_schema.py student_loans
+    python scripts/build_schema.py student_loans --seed       # also generate demo data (LLM)
+    python scripts/build_schema.py student_loans --force      # ignore cache, rebuild all
 
 Outputs under `domains/<name>/_generated/`:
     _builds/module_<name>.json    — per-module Builder output (one per module)
@@ -32,17 +26,14 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agentcore.architect.builder import GRANULARITY_MODULE, GRANULARITY_TABLE, build_modules
+from agentcore.architect.builder import build_modules_deterministic
 from agentcore.architect.planner import PLAN_SCHEMA_VERSION, ontology_hash
 from agentcore.architect.reconciler import ReconcileError, reconcile
 from agentcore.architect.schema import render_ddl
-from agentcore.architect.seed_data import (
-    DEFAULT_ROWS_PER_TABLE,
-    seed_schema,
-    write_seed_file,
-)
+from agentcore.architect.seed_data import seed_schema, write_seed_file
 from agentcore.config import ConfigError, load_config
 from agentcore.domain import list_domains, load_domain, update_domain_manifest
+from agentcore.sif.mapping import generate_mapping_from_schema
 
 
 def _parse_args() -> argparse.Namespace:
@@ -54,27 +45,15 @@ def _parse_args() -> argparse.Namespace:
         "domain", nargs="?",
         help="Domain name (prompted if omitted and multiple domains exist)",
     )
-    granularity = parser.add_mutually_exclusive_group()
-    granularity.add_argument(
-        "--module", dest="granularity", action="store_const",
-        const=GRANULARITY_MODULE,
-        help="One LLM call per module (default)",
-    )
-    granularity.add_argument(
-        "--table", dest="granularity", action="store_const",
-        const=GRANULARITY_TABLE,
-        help="One LLM call per table (for large domains)",
-    )
-    parser.set_defaults(granularity=GRANULARITY_MODULE)
-    parser.add_argument(
-        "-c", "--concurrency", type=int, default=5,
-        help="Max simultaneous LLM calls (default 5)",
-    )
     parser.add_argument(
         "--force", action="store_true",
         help="Ignore cached module builds and rebuild every module from "
              "scratch. By default, modules whose plan slice is unchanged "
              "are reused from `_builds/module_<name>.json`.",
+    )
+    parser.add_argument(
+        "--source", type=str, default=None,
+        help="Data source name to build (default: first source in domain.json)",
     )
     parser.add_argument(
         "--seed", action="store_true",
@@ -83,8 +62,8 @@ def _parse_args() -> argparse.Namespace:
              "table count, so skip it for production or very large domains.",
     )
     parser.add_argument(
-        "--seed-rows", type=int, default=DEFAULT_ROWS_PER_TABLE,
-        help=f"Rows per entity table when --seed is set (default {DEFAULT_ROWS_PER_TABLE})",
+        "--seed-rows", type=int, default=None,
+        help="Rows per entity table when --seed is set (default: from config.ini [architect] section)",
     )
     return parser.parse_args()
 
@@ -164,27 +143,19 @@ def main() -> None:
         sys.exit(1)
 
     domain_name = _pick_domain(app_cfg.domains_dir, args.domain)
-    domain = load_domain(domain_name, app_cfg.domains_dir)
+    domain = load_domain(domain_name, app_cfg.domains_dir, data_source=args.source)
     plan = _load_plan(domain)
+
+    n_modules = len(plan["modules"])
 
     print("=" * 60)
     print(f"  {domain.name} — BUILD + RECONCILE")
     print("=" * 60 + "\n")
 
-    # Phase 2: LLM calls in parallel at the chosen granularity.
-    n_modules = len(plan["modules"])
-    n_tables = sum(len(m.get("tables") or []) for m in plan["modules"])
-    unit = "module" if args.granularity == GRANULARITY_MODULE else "table"
-    n_units = n_modules if unit == "module" else n_tables
-    print(
-        f"  Building {n_units} {unit}(s) in parallel "
-        f"(concurrency={args.concurrency})..."
-    )
-    results = build_modules(
+    # Phase 2: deterministic column inference from ontology.
+    print(f"  Building {n_modules} module(s) deterministically...")
+    results = build_modules_deterministic(
         domain, plan,
-        api_key=app_cfg.api_key,
-        granularity=args.granularity,
-        concurrency=args.concurrency,
         verbose=True,
         force=args.force,
     )
@@ -224,9 +195,33 @@ def main() -> None:
     sql_file = f"{domain.dir_name}_schema.sql"
     sql_path = domain.generated_dir / sql_file
     sql_path.write_text(ddl + "\n", encoding="utf-8", newline="\n")
-    print(f"  Rendered DDL → _generated/{sql_file}")
+    print(f"  Rendered DDL -> _generated/{sql_file}")
 
-    update_domain_manifest(domain, schema=schema_file)
+    # Generate mapping.yaml into the source directory so the runtime
+    # always builds SchemaMap from a mapping — same code path for
+    # architect-designed and pre-existing DBs.
+    mapping_data = generate_mapping_from_schema(domain.ontology_model, schema)
+    mapping_data = {"data_source": domain.data_source, **mapping_data}
+    domain.source_dir.mkdir(parents=True, exist_ok=True)
+    mapping_path = domain.source_dir / "mapping.yaml"
+    mapping_path.write_text(
+        yaml.dump(mapping_data, default_flow_style=False, sort_keys=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    source_rel = domain.source_dir.relative_to(domain.domain_dir)
+    print(f"  Mapping -> {source_rel}/mapping.yaml")
+
+    source_def = {
+        "store": domain.store,
+        "source_dir": str(source_rel).replace("\\", "/"),
+        "mapping": "mapping.yaml",
+    }
+    update_domain_manifest(
+        domain,
+        schema=schema_file,
+        data_source_entry=(domain.data_source, source_def),
+    )
 
     print()
     n_tables = len(schema["tables"])
@@ -244,16 +239,19 @@ def main() -> None:
             if not t.get("lookup_table")
             and (t.get("columns") or [])
         )
+        effective_seed_rows = args.seed_rows if args.seed_rows is not None else app_cfg.architect.rows_per_table
+        effective_concurrency = app_cfg.architect.max_concurrency
         print(
             f"  Generating seed data for {n_entities} entity table(s) "
-            f"at {args.seed_rows} rows each (concurrency={args.concurrency})..."
+            f"at {effective_seed_rows} rows each (concurrency={effective_concurrency})..."
         )
         sql, seed_results = seed_schema(
             domain, schema,
             api_key=app_cfg.api_key,
+            arch_cfg=app_cfg.architect,
             rows_per_table=args.seed_rows,
-            concurrency=args.concurrency,
             verbose=True,
+            llm_model=app_cfg.models.seed_data,
         )
         seed_failed = [r for r in seed_results if not r.ok]
         if seed_failed:
@@ -268,7 +266,7 @@ def main() -> None:
 
         seed_file = write_seed_file(domain, sql)
         update_domain_manifest(domain, seed_data=seed_file)
-        print(f"  Seed SQL → _generated/{seed_file}")
+        print(f"  Seed SQL -> _generated/{seed_file}")
 
     print("\n" + "=" * 60)
     print("  Done. Next step:")

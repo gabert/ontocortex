@@ -1,15 +1,20 @@
 {
   "name": "Dragon Hoard Accounting System",
   "description": "Inventory and threat management for dragon hoards, lairs, and hero incursions",
-  "database_name": "dragon_hoard_demo",
   "ontology": "dragon_ontology.ttl",
-  "business_rules": "dragon_rules.yaml",
+  "business_rules": "dragon_hoard.rules",
   "system_prompt": "dragon_prompt.txt",
+  "data_sources": {
+    "primary": {
+      "store": "dragon_hoard_demo",
+      "source_dir": "data_sources/primary",
+      "mapping": "mapping.yaml"
+    }
+  },
   "generated": {
     "ontology_compact": "dragon_ontology_compact.owl",
+    "schema_plan": "dragon_schema_plan.yaml",
     "schema": "dragon_schema.json",
-    "ddl": "dragon_schema.sql",
-    "seed_data": "dragon_seed_data.sql",
-    "schema_plan": "dragon_schema_plan.yaml"
+    "seed_data": "dragon_seed_data.sql"
   }
 }

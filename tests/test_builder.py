@@ -22,11 +22,24 @@ from agentcore.architect.builder import (
     GRANULARITY_TABLE,
     ModuleBuildResult,
     _build_input,
+    _build_module_deterministic,
     _build_module_input,
+    _range_to_logical_type,
     build_modules,
+    build_modules_deterministic,
 )
 from agentcore.architect.planner import design_plan
 from agentcore.architect.reconciler import BUILDS_SUBDIR, reconcile
+from agentcore.config import ArchitectConfig
+
+_TEST_ARCH_CFG = ArchitectConfig(
+    max_tokens=4096,
+    max_concurrency=5,
+    sdk_max_retries=5,
+    max_validation_attempts=3,
+    rows_per_table=10,
+    junction_rows=5,
+)
 
 
 # Same minimal TTL the reconciler tests use — one module, two entities,
@@ -204,8 +217,8 @@ def test_build_modules_happy_path(mini_domain):
     fake = _FakeAsyncClient(_responder_from_map({"ex": _GOOD_REPLY_EX}))
 
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=fake, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=fake, verbose=False, llm_model="test",
     )
 
     assert len(results) == 1
@@ -226,7 +239,7 @@ def test_build_modules_output_reconciles_end_to_end(mini_domain):
     plan, _ = design_plan(mini_domain)
     fake = _FakeAsyncClient(_responder_from_map({"ex": _GOOD_REPLY_EX}))
 
-    build_modules(mini_domain, plan, api_key="unused", client=fake, verbose=False)
+    build_modules(mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG, client=fake, verbose=False, llm_model="test")
     schema, _ = reconcile(mini_domain, plan)
 
     tables_by_name = {t["name"]: t for t in schema["tables"]}
@@ -242,8 +255,8 @@ def test_build_modules_bad_json_fails_module(mini_domain):
     fake = _FakeAsyncClient(_responder_from_map({"ex": "I am not JSON, sorry."}))
 
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=fake, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=fake, verbose=False, llm_model="test",
     )
 
     (result,) = results
@@ -259,8 +272,8 @@ def test_build_modules_missing_tables_key_fails_module(mini_domain):
     fake = _FakeAsyncClient(_responder_from_map({"ex": json.dumps({"module": "ex"})}))
 
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=fake, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=fake, verbose=False, llm_model="test",
     )
 
     (result,) = results
@@ -324,8 +337,8 @@ def test_build_modules_table_granularity(mini_domain):
 
     fake = _FakeAsyncClient(respond)
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=fake, granularity=GRANULARITY_TABLE, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=fake, granularity=GRANULARITY_TABLE, verbose=False, llm_model="test",
     )
 
     (result,) = results
@@ -359,8 +372,8 @@ def test_build_modules_table_granularity_partial_failure(mini_domain):
 
     fake = _FakeAsyncClient(respond)
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=fake, granularity=GRANULARITY_TABLE, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=fake, granularity=GRANULARITY_TABLE, verbose=False, llm_model="test",
     )
 
     (result,) = results
@@ -408,7 +421,7 @@ def test_build_modules_self_heals_after_correction(mini_domain):
 
     fake = _FakeAsyncClient(responder)
     results = build_modules(
-        mini_domain, plan, api_key="unused", client=fake, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG, client=fake, verbose=False, llm_model="test",
     )
 
     (result,) = results
@@ -432,15 +445,15 @@ def test_build_modules_resumes_from_cached_build(mini_domain):
 
     # First run populates the cache.
     build_modules(
-        mini_domain, plan, api_key="unused",
-        client=_FakeAsyncClient(responder), verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=_FakeAsyncClient(responder), verbose=False, llm_model="test",
     )
     assert calls["n"] == 1
 
     # Second run must hit the cache — no LLM calls.
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=_FakeAsyncClient(responder), verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=_FakeAsyncClient(responder), verbose=False, llm_model="test",
     )
     assert calls["n"] == 1
     (result,) = results
@@ -458,12 +471,12 @@ def test_build_modules_force_bypasses_cache(mini_domain):
         return _GOOD_REPLY_EX
 
     build_modules(
-        mini_domain, plan, api_key="unused",
-        client=_FakeAsyncClient(responder), verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=_FakeAsyncClient(responder), verbose=False, llm_model="test",
     )
     build_modules(
-        mini_domain, plan, api_key="unused",
-        client=_FakeAsyncClient(responder), verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=_FakeAsyncClient(responder), verbose=False, llm_model="test",
         force=True,
     )
     assert calls["n"] == 2
@@ -479,8 +492,8 @@ def test_build_modules_plan_change_invalidates_cache(mini_domain):
         return _GOOD_REPLY_EX
 
     build_modules(
-        mini_domain, plan, api_key="unused",
-        client=_FakeAsyncClient(responder), verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=_FakeAsyncClient(responder), verbose=False, llm_model="test",
     )
     assert calls["n"] == 1
 
@@ -489,8 +502,8 @@ def test_build_modules_plan_change_invalidates_cache(mini_domain):
     plan["tables"][0]["comment"] = "mutated comment — cache should miss"
 
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=_FakeAsyncClient(responder), verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=_FakeAsyncClient(responder), verbose=False, llm_model="test",
     )
     assert calls["n"] == 2
     (result,) = results
@@ -505,9 +518,132 @@ def test_build_modules_strips_markdown_fences(mini_domain):
     fake = _FakeAsyncClient(_responder_from_map({"ex": fenced}))
 
     results = build_modules(
-        mini_domain, plan, api_key="unused",
-        client=fake, verbose=False,
+        mini_domain, plan, api_key="unused", arch_cfg=_TEST_ARCH_CFG,
+        client=fake, verbose=False, llm_model="test",
     )
 
     (result,) = results
     assert result.ok is True, f"unexpected failure: {result.error}"
+
+
+# ── Deterministic builder ───────────────────────────────────────────────────
+
+class TestRangeToLogicalType:
+    def test_xsd_string(self):
+        assert _range_to_logical_type("string") == "string"
+
+    def test_xsd_integer(self):
+        assert _range_to_logical_type("integer") == "integer"
+
+    def test_xsd_int(self):
+        assert _range_to_logical_type("int") == "integer"
+
+    def test_xsd_decimal(self):
+        assert _range_to_logical_type("decimal") == "decimal"
+
+    def test_xsd_float(self):
+        assert _range_to_logical_type("float") == "decimal"
+
+    def test_xsd_boolean(self):
+        assert _range_to_logical_type("boolean") == "boolean"
+
+    def test_xsd_date(self):
+        assert _range_to_logical_type("date") == "date"
+
+    def test_xsd_datetime(self):
+        assert _range_to_logical_type("dateTime") == "datetime"
+
+    def test_value_set(self):
+        assert _range_to_logical_type("value_set:LoanStatus") == "string"
+
+    def test_unknown_falls_back_to_string(self):
+        assert _range_to_logical_type("unknownType") == "string"
+
+    def test_empty_falls_back_to_string(self):
+        assert _range_to_logical_type("") == "string"
+
+
+def test_build_module_deterministic_shape(mini_domain):
+    """Deterministic builder produces the same shape the reconciler expects."""
+    plan, _ = design_plan(mini_domain)
+    model = mini_domain.ontology_model
+    (module,) = plan["modules"]
+
+    payload = _build_module_input(module, plan, model)
+    output = _build_module_deterministic(payload)
+
+    assert output["module"] == "ex"
+    table_names = [t["name"] for t in output["tables"]]
+    assert table_names == ["ex_lenders", "ex_loans"]
+
+    # ex_lenders: one column (lender_name → string)
+    lenders = next(t for t in output["tables"] if t["name"] == "ex_lenders")
+    assert len(lenders["columns"]) == 1
+    col = lenders["columns"][0]
+    assert col["name"] == "lender_name"
+    assert col["type"] == "string"
+    assert col["not_null"] is True
+    assert col["required"] is True
+    assert col["unique"] is False
+
+    # ex_loans: two columns (amount → decimal, status → string from value_set)
+    loans = next(t for t in output["tables"] if t["name"] == "ex_loans")
+    cols_by_name = {c["name"]: c for c in loans["columns"]}
+    assert set(cols_by_name) == {"amount", "status"}
+    assert cols_by_name["amount"]["type"] == "decimal"
+    assert cols_by_name["status"]["type"] == "string"
+
+
+def test_build_modules_deterministic_happy_path(mini_domain):
+    """End-to-end deterministic build: modules succeed, files land on disk,
+    and the output reconciles with no errors."""
+    plan, _ = design_plan(mini_domain)
+
+    results = build_modules_deterministic(
+        mini_domain, plan, verbose=False,
+    )
+
+    assert len(results) == 1
+    (result,) = results
+    assert result.ok is True
+    assert result.path is not None
+    assert result.path.exists()
+
+    written = json.loads(result.path.read_text(encoding="utf-8"))
+    assert written["module"] == "ex"
+    assert {t["name"] for t in written["tables"]} == {"ex_lenders", "ex_loans"}
+
+    # Must reconcile cleanly.
+    schema, _ = reconcile(mini_domain, plan)
+    tables_by_name = {t["name"]: t for t in schema["tables"]}
+    assert "ex_loan_status_values" in tables_by_name
+    assert "ex_loans" in tables_by_name
+    loans = tables_by_name["ex_loans"]
+    status = next(c for c in loans["columns"] if c["name"] == "status")
+    assert status["references"]["table"] == "ex_loan_status_values"
+
+
+def test_build_modules_deterministic_caches(mini_domain):
+    """Second deterministic run skips already-built modules."""
+    plan, _ = design_plan(mini_domain)
+
+    build_modules_deterministic(mini_domain, plan, verbose=False)
+    results = build_modules_deterministic(mini_domain, plan, verbose=False)
+
+    (result,) = results
+    assert result.ok is True
+    assert result.skipped is True
+
+
+def test_build_modules_deterministic_force_rebuilds(mini_domain):
+    """--force bypasses the cache in deterministic mode."""
+    plan, _ = design_plan(mini_domain)
+
+    build_modules_deterministic(mini_domain, plan, verbose=False)
+    results = build_modules_deterministic(
+        mini_domain, plan, verbose=False, force=True,
+    )
+
+    (result,) = results
+    assert result.ok is True
+    assert result.skipped is False

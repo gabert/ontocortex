@@ -20,8 +20,17 @@ class TableMap:
     class_iri: str       # Ontology IRI: "https://.../ontology#Customer"
     table_name: str      # Physical: "ins_customers"
     primary_key: str     # Physical: "ins_customer_id"
-    columns: list[str]   # Physical data column names (no PK/FK/created_at)
+    columns: list[str]   # Ontology property names — what SIF / LLM uses
+    column_map: dict[str, str] = field(default_factory=dict)  # ontology → physical
     comment: str = ""
+
+    def physical_column(self, field_name: str) -> str:
+        """Resolve an ontology field name to its physical column name.
+
+        When column_map is empty (auto-generated schema), returns the
+        name unchanged — ontology names ARE the physical names.
+        """
+        return self.column_map.get(field_name, field_name)
 
 
 @dataclass
@@ -75,11 +84,13 @@ class SchemaMap:
         self.tables_by_iri: dict[str, TableMap] = {}
         self.relations: dict[str, RelationMap] = {}  # object-property local_name -> RelationMap
         self.junction_tables: set[str] = set()
+        self.fk_index: dict[str, list[tuple[str, str]]] = {}  # ref_table → [(fk_table, fk_column)]
         self._schema = schema
         self._build(ontology_model, schema)
 
     def _build(self, model: dict, schema: dict) -> None:
         self._build_tables(model, schema)
+        self._build_fk_index(schema)
         self.junction_tables = self._detect_junction_tables(schema)
         self._build_relations(model, schema)
 
@@ -127,6 +138,21 @@ class SchemaMap:
             )
             self.tables[local] = tmap
             self.tables_by_iri[iri] = tmap
+
+    # ── FK index ─────────────────────────────────────────────────────────
+
+    def _build_fk_index(self, schema: dict) -> None:
+        """Build a lookup of ref_table → [(fk_table, fk_column)].
+
+        Used by OwnershipMap to find tables scoped to the identity entity,
+        without reaching into the raw schema dict.
+        """
+        for t in schema.get("tables", []):
+            for fk in t.get("foreign_keys", []):
+                ref = fk["references_table"]
+                self.fk_index.setdefault(ref, []).append(
+                    (t["name"], fk["column"])
+                )
 
     # ── Junction detection ───────────────────────────────────────────────
 

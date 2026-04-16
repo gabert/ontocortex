@@ -177,10 +177,9 @@ single-namespace domains (student_loans, insurance, vet) but will
 produce a single oversized module for a 300-table domain that happens
 to share one prefix.
 
-Modules are the **parallelism unit** for Phase 2. The Builder runs
-one LLM call per module, and calls run in parallel. Target module
-size: **5–20 tables**. Too-large modules lose the speedup; too-small
-modules lose context coherence within each call.
+Modules are the **grouping unit** for Phase 2. The deterministic
+builder processes them sequentially (instant). Target module size:
+**5–20 tables**.
 
 **Fix:** force groupings explicitly. Each entry can match by physical
 table name, class local_name, qname, or full IRI.
@@ -331,9 +330,9 @@ understand why `hasPayment` is `domain` two years from now.
 The plan is the input to two downstream phases (not yet implemented as of
 this writing — see `NOTES_scaled_architect.md`):
 
-- **Phase 2 — Builder.** One LLM call per module. Reads the module slice
-  of the ontology + the FK columns from the plan, emits detailed columns
-  with types, constraints, defaults. Runs in parallel across modules.
+- **Phase 2 — Builder.** Deterministic. Maps each ontology datatype
+  property to a column definition using XSD type → logical type mapping
+  and convention-based flags. No LLM call.
 - **Phase 3 — Reconciler.** Pure Python. Merges the Builder outputs,
   injects lookup tables from value sets, topologically sorts table
   creation order, validates global referential integrity, renders DDL.

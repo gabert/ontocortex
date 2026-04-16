@@ -37,10 +37,39 @@ class DatabaseConfig:
 
 
 @dataclass
+class ModelConfig:
+    chat: str
+    seed_data: str
+    analyzer: str
+
+
+@dataclass
+class ChatConfig:
+    max_tokens: int
+    max_retries: int
+    retry_delay: int
+    max_iterations: int
+
+
+@dataclass
+class ArchitectConfig:
+    max_tokens: int
+    max_concurrency: int
+    sdk_max_retries: int
+    max_validation_attempts: int
+    rows_per_table: int
+    junction_rows: int
+
+
+@dataclass
 class AppConfig:
     api_key: str
-    database: DatabaseConfig
+    models: ModelConfig
+    chat: ChatConfig
+    architect: ArchitectConfig
+    data_sources: dict[str, DatabaseConfig]          # From [data_source:*] sections
     domains_dir: Path
+    database: DatabaseConfig | None = None            # Active connection (set at runtime)
 
 
 def load_config(path: Path = _CONFIG_PATH) -> AppConfig:
@@ -79,14 +108,90 @@ def load_config(path: Path = _CONFIG_PATH) -> AppConfig:
     else:
         domains_dir = _DEFAULT_DOMAINS_DIR
 
+    # Parse [models] section — chat, seed_data, analyzer are required.
+    # architect is optional (only needed with build_schema.py --llm).
+    if not cfg.has_section("models"):
+        raise ConfigError(
+            "Missing [models] section in config.ini.\n"
+            "Add it with: chat, seed_data, analyzer."
+        )
+    _model_keys = ("chat", "seed_data", "analyzer")
+    _missing = [k for k in _model_keys if not cfg.get("models", k, fallback="").strip()]
+    if _missing:
+        raise ConfigError(
+            f"Missing model(s) in [models] section: {', '.join(_missing)}.\n"
+            "Every model must be explicitly configured."
+        )
+    models = ModelConfig(
+        chat=cfg.get("models", "chat"),
+        seed_data=cfg.get("models", "seed_data"),
+        analyzer=cfg.get("models", "analyzer"),
+    )
+
+    # Parse [chat] section — all keys required.
+    if not cfg.has_section("chat"):
+        raise ConfigError(
+            "Missing [chat] section in config.ini.\n"
+            "Add it with: max_tokens, max_retries, retry_delay, max_iterations."
+        )
+    _chat_keys = ("max_tokens", "max_retries", "retry_delay", "max_iterations")
+    _missing = [k for k in _chat_keys if not cfg.get("chat", k, fallback="").strip()]
+    if _missing:
+        raise ConfigError(
+            f"Missing key(s) in [chat] section: {', '.join(_missing)}.\n"
+            "Every key must be explicitly configured."
+        )
+    chat_cfg = ChatConfig(
+        max_tokens=cfg.getint("chat", "max_tokens"),
+        max_retries=cfg.getint("chat", "max_retries"),
+        retry_delay=cfg.getint("chat", "retry_delay"),
+        max_iterations=cfg.getint("chat", "max_iterations"),
+    )
+
+    # Parse [architect] section — all keys required.
+    if not cfg.has_section("architect"):
+        raise ConfigError(
+            "Missing [architect] section in config.ini.\n"
+            "Add it with: max_tokens, max_concurrency, sdk_max_retries, "
+            "max_validation_attempts, rows_per_table, junction_rows."
+        )
+    _arch_keys = (
+        "max_tokens", "max_concurrency", "sdk_max_retries",
+        "max_validation_attempts", "rows_per_table", "junction_rows",
+    )
+    _missing = [k for k in _arch_keys if not cfg.get("architect", k, fallback="").strip()]
+    if _missing:
+        raise ConfigError(
+            f"Missing key(s) in [architect] section: {', '.join(_missing)}.\n"
+            "Every key must be explicitly configured."
+        )
+    architect_cfg = ArchitectConfig(
+        max_tokens=cfg.getint("architect", "max_tokens"),
+        max_concurrency=cfg.getint("architect", "max_concurrency"),
+        sdk_max_retries=cfg.getint("architect", "sdk_max_retries"),
+        max_validation_attempts=cfg.getint("architect", "max_validation_attempts"),
+        rows_per_table=cfg.getint("architect", "rows_per_table"),
+        junction_rows=cfg.getint("architect", "junction_rows"),
+    )
+
+    # Parse [data_source:NAME] sections — each is fully self-contained.
+    data_sources: dict[str, DatabaseConfig] = {}
+    for section in cfg.sections():
+        if section.startswith("data_source:"):
+            name = section[len("data_source:"):]
+            data_sources[name] = DatabaseConfig(
+                dbname=cfg.get(section, "dbname"),
+                user=cfg.get(section, "user"),
+                password=cfg.get(section, "password"),
+                host=cfg.get(section, "host"),
+                port=cfg.getint(section, "port"),
+            )
+
     return AppConfig(
         api_key=api_key,
-        database=DatabaseConfig(
-            dbname=cfg.get("database", "dbname"),
-            user=cfg.get("database", "user"),
-            password=cfg.get("database", "password"),
-            host=cfg.get("database", "host"),
-            port=cfg.getint("database", "port"),
-        ),
+        models=models,
+        chat=chat_cfg,
+        architect=architect_cfg,
+        data_sources=data_sources,
         domains_dir=domains_dir,
     )

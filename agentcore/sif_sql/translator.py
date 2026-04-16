@@ -22,6 +22,26 @@ class SQLStatement:
     sql: str
     params: dict
     is_write: bool
+    table_name: str = ""   # Physical table name (for post-translation layers)
+    op_type: str = ""      # "query"/"create"/"update"/"delete"
+
+
+class _Params:
+    """Auto-incrementing named parameter builder (:p1, :p2, ...)."""
+
+    def __init__(self) -> None:
+        self.values: dict = {}
+        self._counter = 0
+
+    def add(self, value) -> str:
+        """Register a value and return its bind placeholder (e.g. ':p1')."""
+        self._counter += 1
+        name = f"p{self._counter}"
+        self.values[name] = value
+        return f":{name}"
+
+
+# ── Public API ──────────────────────────────────────────────────────────────
 
 
 def translate(operation: dict, schema_map: SchemaMap) -> SQLStatement | LinkPlan:
@@ -64,36 +84,64 @@ def translate_all(
     return [translate(op, schema_map) for op in operations]
 
 
-# ── Query ────────────────────────────────────────────────────────────────────
+# ── Query ───────────────────────────────────────────────────────────────────
+
 
 def _translate_query(op: dict, table: TableMap, smap: SchemaMap) -> SQLStatement:
-    params = {}
-    counter = [0]
-
-    def _p(value):
-        counter[0] += 1
-        name = f"p{counter[0]}"
-        params[name] = value
-        return f":{name}"
-
+    p = _Params()
     t = table.table_name
 
-    # SELECT
+    select = _build_select(op, table, t)
+    joins, join_wheres = _build_joins(op, table, smap, p)
+    direct_wheres = _build_where(op.get("filters"), table, p, qualified=t)
+    wheres = join_wheres + direct_wheres
+
+    sql = f"SELECT {select} FROM {t}"
+    for j in joins:
+        sql += f" {j}"
+    if wheres:
+        sql += " WHERE " + " AND ".join(wheres)
+
+    sort = op.get("sort")
+    if sort:
+        direction = sort.get("dir", "asc").upper()
+        sql += f" ORDER BY {t}.{table.physical_column(sort['field'])} {direction}"
+
+    limit = op.get("limit")
+    if limit:
+        sql += f" LIMIT {p.add(limit)}"
+
+    return SQLStatement(sql=sql, params=p.values, is_write=False,
+                        table_name=t, op_type="query")
+
+
+def _build_select(op: dict, table: TableMap, table_alias: str) -> str:
+    """Build the SELECT clause: aggregate, explicit fields, or wildcard."""
     agg = op.get("aggregate")
     if agg:
         fn = agg["fn"]
         agg_field = agg.get("field")
-        select = f"{fn}({t}.{agg_field})" if agg_field else f"{fn}(*)"
-    else:
-        fields = op.get("fields")
-        if fields:
-            select = ", ".join(f"{t}.{f}" for f in fields)
-        else:
-            select = f"{t}.*"
+        if agg_field:
+            return f"{fn}({table_alias}.{table.physical_column(agg_field)})"
+        return f"{fn}(*)"
 
-    # JOINs + WHERE from relations
-    joins = []
-    wheres = []
+    fields = op.get("fields")
+    if fields:
+        return ", ".join(f"{table_alias}.{table.physical_column(f)}" for f in fields)
+
+    return f"{table_alias}.*"
+
+
+def _build_joins(
+    op: dict, table: TableMap, smap: SchemaMap, p: _Params,
+) -> tuple[list[str], list[str]]:
+    """Build JOIN clauses and WHERE conditions from relation traversals.
+
+    Returns (join_clauses, where_conditions).
+    """
+    joins: list[str] = []
+    wheres: list[str] = []
+    t = table.table_name
 
     for rel in op.get("relations") or []:
         rel_name = rel["rel"]
@@ -106,186 +154,181 @@ def _translate_query(op: dict, table: TableMap, smap: SchemaMap) -> SQLStatement
         if not rel_table:
             raise TranslationError(f"Unknown entity in relation: {rel_entity}")
 
-        # Emit one JOIN per step in topological order: at each iteration, pick
-        # a remaining step whose endpoints include at least one table already
-        # in `joined`, and join the other endpoint. This way the same stored
-        # step list works whether the query starts from the domain or range
-        # side of the ontology relation — the 2-step junction path through
-        # a junction table joins correctly both from either end.
-        joined = {t}
-        remaining = list(rel_map.steps)
-        while remaining:
-            for i, step in enumerate(remaining):
-                endpoints = {step.fk_table, step.ref_table}
-                anchored = endpoints & joined
-                if not anchored:
-                    continue
-                unjoined = endpoints - joined
-                if not unjoined:
-                    # Both endpoints already joined: nothing new to add,
-                    # just drop the step (a harmless redundancy).
-                    remaining.pop(i)
-                    break
-                target = next(iter(unjoined))
-                join_cond = (
-                    f"{step.fk_table}.{step.fk_column} = "
-                    f"{step.ref_table}.{step.ref_column}"
-                )
-                joins.append(f"JOIN {target} ON {join_cond}")
-                joined.add(target)
-                remaining.pop(i)
-                break
-            else:
-                raise TranslationError(
-                    f"Cannot build join path for relation '{rel_name}' "
-                    f"from {t}: no remaining step connects to already-joined "
-                    f"tables {joined}"
-                )
+        _emit_join_steps(joins, t, rel_map, rel_name)
 
         for field_name, value in (rel.get("filters") or {}).items():
-            wheres.append(f"{rel_table.table_name}.{field_name} = {_p(value)}")
+            phys = rel_table.physical_column(field_name)
+            wheres.append(f"{rel_table.table_name}.{phys} = {p.add(value)}")
 
-    # Direct filters on main entity
-    for field_name, value in (op.get("filters") or {}).items():
-        wheres.append(f"{t}.{field_name} = {_p(value)}")
-
-    # BUILD
-    sql = f"SELECT {select} FROM {t}"
-    for j in joins:
-        sql += f" {j}"
-    if wheres:
-        sql += " WHERE " + " AND ".join(wheres)
-
-    sort = op.get("sort")
-    if sort:
-        direction = sort.get("dir", "asc").upper()
-        sql += f" ORDER BY {t}.{sort['field']} {direction}"
-
-    limit = op.get("limit")
-    if limit:
-        sql += f" LIMIT {_p(limit)}"
-
-    return SQLStatement(sql=sql, params=params, is_write=False)
+    return joins, wheres
 
 
-# ── Create ───────────────────────────────────────────────────────────────────
+def _emit_join_steps(
+    joins: list[str], anchor: str, rel_map, rel_name: str,
+) -> None:
+    """Emit one JOIN per step in topological order.
+
+    At each iteration, pick a remaining step whose endpoints include at
+    least one table already in `joined`, and join the other endpoint.
+    This way the same stored step list works whether the query starts
+    from the domain or range side of the ontology relation.
+    """
+    joined = {anchor}
+    remaining = list(rel_map.steps)
+
+    while remaining:
+        for i, step in enumerate(remaining):
+            endpoints = {step.fk_table, step.ref_table}
+            anchored = endpoints & joined
+            if not anchored:
+                continue
+            unjoined = endpoints - joined
+            if not unjoined:
+                remaining.pop(i)
+                break
+            target = next(iter(unjoined))
+            join_cond = (
+                f"{step.fk_table}.{step.fk_column} = "
+                f"{step.ref_table}.{step.ref_column}"
+            )
+            joins.append(f"JOIN {target} ON {join_cond}")
+            joined.add(target)
+            remaining.pop(i)
+            break
+        else:
+            raise TranslationError(
+                f"Cannot build join path for relation '{rel_name}' "
+                f"from {anchor}: no remaining step connects to "
+                f"already-joined tables {joined}"
+            )
+
+
+# ── Create ──────────────────────────────────────────────────────────────────
+
 
 def _translate_create(op: dict, table: TableMap, smap: SchemaMap) -> SQLStatement:
-    params = {}
-    counter = [0]
+    p = _Params()
+    columns: list[str] = []
+    values: list[str] = []
 
-    def _p(value):
-        counter[0] += 1
-        name = f"p{counter[0]}"
-        params[name] = value
-        return f":{name}"
-
-    columns = []
-    values = []
-
-    # Data fields
     for field_name, value in (op.get("data") or {}).items():
-        columns.append(field_name)
-        values.append(_p(value))
+        columns.append(table.physical_column(field_name))
+        values.append(p.add(value))
 
-    # Resolve relations -> FK subqueries
     for rel_name, resolve in (op.get("resolve") or {}).items():
-        rel_map = smap.relations.get(rel_name)
-        if not rel_map:
-            raise TranslationError(f"Unknown relation for resolve: {rel_name}")
-
-        # Create/resolve only supports direct FKs — junction relations need
-        # an explicit link op after the create.
-        if not rel_map.is_direct:
-            raise TranslationError(
-                f"Cannot resolve {rel_name}: traverses a junction table. "
-                f"Use a 'link' op after the create instead."
-            )
-
-        # FK must be on the table we're inserting into
-        if rel_map.fk_table != table.table_name:
-            raise TranslationError(
-                f"Cannot resolve {rel_name}: FK is on {rel_map.fk_table}, not {table.table_name}"
-            )
-
-        resolve_entity = resolve.get("entity")
-        resolve_table = smap.tables.get(resolve_entity)
-        if not resolve_table:
-            raise TranslationError(f"Unknown entity in resolve: {resolve_entity}")
-
-        # Build subquery
-        sub_wheres = []
-        for f, v in (resolve.get("filters") or {}).items():
-            sub_wheres.append(f"{f} = {_p(v)}")
-
-        subquery = f"(SELECT {resolve_table.primary_key} FROM {resolve_table.table_name}"
-        if sub_wheres:
-            subquery += " WHERE " + " AND ".join(sub_wheres)
-        subquery += " LIMIT 1)"
-
-        columns.append(rel_map.fk_column)
+        col, subquery = _resolve_fk_subquery(rel_name, resolve, table, smap, p)
+        columns.append(col)
         values.append(subquery)
 
-    sql = f"INSERT INTO {table.table_name} ({', '.join(columns)}) VALUES ({', '.join(values)}) RETURNING *"
-    return SQLStatement(sql=sql, params=params, is_write=True)
+    sql = (
+        f"INSERT INTO {table.table_name} "
+        f"({', '.join(columns)}) VALUES ({', '.join(values)}) RETURNING *"
+    )
+    return SQLStatement(sql=sql, params=p.values, is_write=True,
+                        table_name=table.table_name, op_type="create")
 
 
-# ── Update ───────────────────────────────────────────────────────────────────
+def _resolve_fk_subquery(
+    rel_name: str, resolve: dict, table: TableMap, smap: SchemaMap, p: _Params,
+) -> tuple[str, str]:
+    """Build a (fk_column, subselect) pair for a resolve clause.
+
+    Validates that the relation is a direct FK on the target table.
+    """
+    rel_map = smap.relations.get(rel_name)
+    if not rel_map:
+        raise TranslationError(f"Unknown relation for resolve: {rel_name}")
+
+    if not rel_map.is_direct:
+        raise TranslationError(
+            f"Cannot resolve {rel_name}: traverses a junction table. "
+            f"Use a 'link' op after the create instead."
+        )
+    if rel_map.fk_table != table.table_name:
+        raise TranslationError(
+            f"Cannot resolve {rel_name}: FK is on {rel_map.fk_table}, not {table.table_name}"
+        )
+
+    resolve_entity = resolve.get("entity")
+    resolve_table = smap.tables.get(resolve_entity)
+    if not resolve_table:
+        raise TranslationError(f"Unknown entity in resolve: {resolve_entity}")
+
+    sub_wheres = [
+        f"{resolve_table.physical_column(f)} = {p.add(v)}"
+        for f, v in (resolve.get("filters") or {}).items()
+    ]
+
+    subquery = f"(SELECT {resolve_table.primary_key} FROM {resolve_table.table_name}"
+    if sub_wheres:
+        subquery += " WHERE " + " AND ".join(sub_wheres)
+    subquery += " LIMIT 1)"
+
+    return rel_map.fk_column, subquery
+
+
+# ── Update ──────────────────────────────────────────────────────────────────
+
 
 def _translate_update(op: dict, table: TableMap, smap: SchemaMap) -> SQLStatement:
-    params = {}
-    counter = [0]
+    p = _Params()
 
-    def _p(value):
-        counter[0] += 1
-        name = f"p{counter[0]}"
-        params[name] = value
-        return f":{name}"
-
-    sets = []
-    for field_name, value in (op.get("data") or {}).items():
-        sets.append(f"{field_name} = {_p(value)}")
-
+    sets = [
+        f"{table.physical_column(f)} = {p.add(v)}"
+        for f, v in (op.get("data") or {}).items()
+    ]
     if not sets:
         raise TranslationError("Update operation requires at least one field in 'data'")
 
-    wheres = []
-    for field_name, value in (op.get("filters") or {}).items():
-        wheres.append(f"{field_name} = {_p(value)}")
+    wheres = _build_where(op.get("filters"), table, p)
 
     sql = f"UPDATE {table.table_name} SET {', '.join(sets)}"
     if wheres:
         sql += " WHERE " + " AND ".join(wheres)
     sql += " RETURNING *"
 
-    return SQLStatement(sql=sql, params=params, is_write=True)
+    return SQLStatement(sql=sql, params=p.values, is_write=True,
+                        table_name=table.table_name, op_type="update")
 
 
-# ── Delete ───────────────────────────────────────────────────────────────────
+# ── Delete ──────────────────────────────────────────────────────────────────
+
 
 def _translate_delete(op: dict, table: TableMap, smap: SchemaMap) -> SQLStatement:
-    params = {}
-    counter = [0]
-
-    def _p(value):
-        counter[0] += 1
-        name = f"p{counter[0]}"
-        params[name] = value
-        return f":{name}"
-
-    wheres = []
-    for field_name, value in (op.get("filters") or {}).items():
-        wheres.append(f"{field_name} = {_p(value)}")
+    p = _Params()
+    wheres = _build_where(op.get("filters"), table, p)
 
     sql = f"DELETE FROM {table.table_name}"
     if wheres:
         sql += " WHERE " + " AND ".join(wheres)
     sql += " RETURNING *"
 
-    return SQLStatement(sql=sql, params=params, is_write=True)
+    return SQLStatement(sql=sql, params=p.values, is_write=True,
+                        table_name=table.table_name, op_type="delete")
 
 
-# ── Link / Unlink ────────────────────────────────────────────────────────────
+# ── Shared helpers ──────────────────────────────────────────────────────────
+
+
+def _build_where(
+    filters: dict | None, table: TableMap, p: _Params,
+    qualified: str | None = None,
+) -> list[str]:
+    """Build WHERE conditions from a filters dict.
+
+    When `qualified` is set, column references are prefixed with it
+    (e.g. 'sl_loans.loan_status'). Otherwise bare column names are used.
+    """
+    wheres: list[str] = []
+    for field_name, value in (filters or {}).items():
+        phys = table.physical_column(field_name)
+        col_ref = f"{qualified}.{phys}" if qualified else phys
+        wheres.append(f"{col_ref} = {p.add(value)}")
+    return wheres
+
+
+# ── Link / Unlink ───────────────────────────────────────────────────────────
+
 
 def _translate_link(op: dict, smap: SchemaMap) -> LinkPlan:
     """Produce a structured plan for a link/unlink op.
@@ -319,7 +362,6 @@ def _translate_link(op: dict, smap: SchemaMap) -> LinkPlan:
             f"{op_type}: unknown endpoint entity ({from_entity!r}, {to_entity!r})"
         )
 
-    # Match junction steps to the right side by physical table name.
     from_step = next(
         (s for s in rel_map.steps if s.ref_table == from_table.table_name),
         None,

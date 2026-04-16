@@ -15,8 +15,10 @@ from agentcore.agents.conversation import ConversationAgent
 from agentcore.config import AppConfig
 from agentcore.debug_log import analyze_error, dump_turn, new_session_id
 from agentcore.domain import DomainConfig
+from agentcore.identity import IdentityContext, OwnershipMap
 from agentcore.actions import clear_actions, load_domain_actions
-from agentcore.sif import SchemaMap, build_sif_tool
+from agentcore.sif import build_sif_tool
+from agentcore.sif.mapping import build_schema_map_from_mapping
 from agentcore.sif_sql import execute_sif
 
 
@@ -25,13 +27,30 @@ class AgentPipeline:
 
     def __init__(
         self, config: AppConfig, domain: DomainConfig, verbose: bool = True,
+        identity: IdentityContext | None = None,
     ) -> None:
         self.config = config
         self.domain = domain
         self.verbose = verbose
+        self.identity = identity
 
         # Build the ontology-to-schema mapping once.
-        self.schema_map = SchemaMap(domain.ontology_model, domain.schema_data)
+        # Always go through mapping.yaml — same code path regardless of
+        # whether the DB was architect-designed or pre-existing.
+        if not domain.has_mapping:
+            raise FileNotFoundError(
+                f"No mapping file found for domain '{domain.dir_name}'. "
+                "Run: python scripts/build_schema.py"
+            )
+        self.schema_map = build_schema_map_from_mapping(
+            domain.ontology_model, domain.mapping_data,
+        )
+
+        # Build ownership map if the domain declares an identity entity.
+        identity_entity = domain.identity_entity
+        self.ownership: OwnershipMap | None = None
+        if identity_entity:
+            self.ownership = OwnershipMap(identity_entity, self.schema_map)
 
         # Load domain-specific actions before building the tool schema.
         clear_actions()
@@ -44,7 +63,10 @@ class AgentPipeline:
 
         self._client = Anthropic(api_key=config.api_key)
         self.conversation = ConversationAgent(
-            self._client, domain, sif_tool, verbose=verbose,
+            self._client, domain, sif_tool,
+            model=config.models.chat,
+            chat_cfg=config.chat,
+            verbose=verbose,
         )
 
         # Exposed for the UI: query log from the most recent turn.
@@ -73,6 +95,7 @@ class AgentPipeline:
 
             result_text, query_log = execute_sif(
                 operations, self.schema_map, self.config.database, self.verbose,
+                identity=self.identity, ownership=self.ownership,
             )
             self.last_query_log.extend(query_log)
             return result_text, query_log
@@ -100,6 +123,7 @@ class AgentPipeline:
                 path = analyze_error(
                     self._client, self.session_id, e,
                     corrupted, self.last_query_log,
+                    llm_model=self.config.models.analyzer,
                 )
                 if self.verbose and path:
                     print(f"    [PIPELINE] Error analysis → {path}")
@@ -110,6 +134,17 @@ class AgentPipeline:
             # No orphaned tool_use blocks are possible by construction.
             del self.conversation.messages[snapshot_len:]
             raise
+
+    def set_user_context(self, user_data: dict | None) -> None:
+        """Pass the logged-in user's profile to the agent.
+
+        Injects user details into the system prompt so the agent knows
+        who it's talking to. Also resets conversation history since the
+        identity changed.
+        """
+        self.conversation.set_user_context(user_data)
+        self.conversation.reset()
+        self.last_query_log = []
 
     def reset(self) -> None:
         """Clear conversation history."""

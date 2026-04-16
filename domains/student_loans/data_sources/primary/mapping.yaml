@@ -1,0 +1,207 @@
+data_source: primary
+tables:
+  Cosigner:
+    iri: https://studentloans.example.org/ontology#Cosigner
+    table: sl_cosigners
+    primary_key: sl_cosigner_id
+    columns:
+      annual_income:
+        iri: https://studentloans.example.org/ontology#annualIncome
+        column: annual_income
+      cosigner_relationship:
+        iri: https://studentloans.example.org/ontology#cosignerRelationship
+        column: cosigner_relationship
+      credit_score:
+        iri: https://studentloans.example.org/ontology#creditScore
+        column: credit_score
+      email:
+        iri: https://studentloans.example.org/ontology#email
+        column: email
+      first_name:
+        iri: https://studentloans.example.org/ontology#firstName
+        column: first_name
+      last_name:
+        iri: https://studentloans.example.org/ontology#lastName
+        column: last_name
+  Lender:
+    iri: https://studentloans.example.org/ontology#Lender
+    table: sl_lenders
+    primary_key: sl_lender_id
+    columns:
+      lender_country:
+        iri: https://studentloans.example.org/ontology#lenderCountry
+        column: lender_country
+      lender_name:
+        iri: https://studentloans.example.org/ontology#lenderName
+        column: lender_name
+      lender_type:
+        iri: https://studentloans.example.org/ontology#lenderType
+        column: lender_type
+  Loan:
+    iri: https://studentloans.example.org/ontology#Loan
+    table: sl_loans
+    primary_key: sl_loan_id
+    columns:
+      autopay_enabled:
+        iri: https://studentloans.example.org/ontology#autopayEnabled
+        column: autopay_enabled
+      current_balance:
+        iri: https://studentloans.example.org/ontology#currentBalance
+        column: current_balance
+      interest_rate:
+        iri: https://studentloans.example.org/ontology#interestRate
+        column: interest_rate
+      loan_number:
+        iri: https://studentloans.example.org/ontology#loanNumber
+        column: loan_number
+      loan_status:
+        iri: https://studentloans.example.org/ontology#loanStatus
+        column: loan_status
+      origination_date:
+        iri: https://studentloans.example.org/ontology#originationDate
+        column: origination_date
+      principal_amount:
+        iri: https://studentloans.example.org/ontology#principalAmount
+        column: principal_amount
+      term_months:
+        iri: https://studentloans.example.org/ontology#termMonths
+        column: term_months
+  LoanType:
+    iri: https://studentloans.example.org/ontology#LoanType
+    table: sl_loan_types
+    primary_key: sl_loan_type_id
+    columns:
+      base_interest_rate:
+        iri: https://studentloans.example.org/ontology#baseInterestRate
+        column: base_interest_rate
+      requires_cosigner:
+        iri: https://studentloans.example.org/ontology#requiresCosigner
+        column: requires_cosigner
+      type_description:
+        iri: https://studentloans.example.org/ontology#typeDescription
+        column: type_description
+      type_name:
+        iri: https://studentloans.example.org/ontology#typeName
+        column: type_name
+  Payment:
+    iri: https://studentloans.example.org/ontology#Payment
+    table: sl_payments
+    primary_key: sl_payment_id
+    columns:
+      amount:
+        iri: https://studentloans.example.org/ontology#amount
+        column: amount
+      interest_portion:
+        iri: https://studentloans.example.org/ontology#interestPortion
+        column: interest_portion
+      payment_date:
+        iri: https://studentloans.example.org/ontology#paymentDate
+        column: payment_date
+      payment_method:
+        iri: https://studentloans.example.org/ontology#paymentMethod
+        column: payment_method
+      payment_number:
+        iri: https://studentloans.example.org/ontology#paymentNumber
+        column: payment_number
+      payment_status:
+        iri: https://studentloans.example.org/ontology#paymentStatus
+        column: payment_status
+      principal_portion:
+        iri: https://studentloans.example.org/ontology#principalPortion
+        column: principal_portion
+  School:
+    iri: https://studentloans.example.org/ontology#School
+    table: sl_schools
+    primary_key: sl_school_id
+    columns:
+      is_accredited:
+        iri: https://studentloans.example.org/ontology#isAccredited
+        column: is_accredited
+      school_country:
+        iri: https://studentloans.example.org/ontology#schoolCountry
+        column: school_country
+      school_name:
+        iri: https://studentloans.example.org/ontology#schoolName
+        column: school_name
+      school_state:
+        iri: https://studentloans.example.org/ontology#schoolState
+        column: school_state
+      school_type:
+        iri: https://studentloans.example.org/ontology#schoolType
+        column: school_type
+  Student:
+    iri: https://studentloans.example.org/ontology#Student
+    table: sl_students
+    primary_key: sl_student_id
+    columns:
+      country_of_residence:
+        iri: https://studentloans.example.org/ontology#countryOfResidence
+        column: country_of_residence
+      date_of_birth:
+        iri: https://studentloans.example.org/ontology#dateOfBirth
+        column: date_of_birth
+      email:
+        iri: https://studentloans.example.org/ontology#email
+        column: email
+      enrollment_status:
+        iri: https://studentloans.example.org/ontology#enrollmentStatus
+        column: enrollment_status
+      first_name:
+        iri: https://studentloans.example.org/ontology#firstName
+        column: first_name
+      graduation_date:
+        iri: https://studentloans.example.org/ontology#graduationDate
+        column: graduation_date
+      last_name:
+        iri: https://studentloans.example.org/ontology#lastName
+        column: last_name
+relations:
+  forSchool:
+    iri: https://studentloans.example.org/ontology#forSchool
+    type: direct
+    fk_table: sl_loans
+    fk_column: sl_school_id
+    ref_table: sl_schools
+    ref_column: sl_school_id
+  hasBorrower:
+    iri: https://studentloans.example.org/ontology#hasBorrower
+    type: direct
+    fk_table: sl_loans
+    fk_column: sl_student_id
+    ref_table: sl_students
+    ref_column: sl_student_id
+  hasCosigner:
+    iri: https://studentloans.example.org/ontology#hasCosigner
+    type: junction
+    junction_table: sl_loan_cosigners
+    steps:
+    - fk_table: sl_loan_cosigners
+      fk_column: sl_loan_id
+      ref_table: sl_loans
+      ref_column: sl_loan_id
+    - fk_table: sl_loan_cosigners
+      fk_column: sl_cosigner_id
+      ref_table: sl_cosigners
+      ref_column: sl_cosigner_id
+  hasLoanType:
+    iri: https://studentloans.example.org/ontology#hasLoanType
+    type: direct
+    fk_table: sl_loans
+    fk_column: sl_loan_type_id
+    ref_table: sl_loan_types
+    ref_column: sl_loan_type_id
+  hasPayment:
+    iri: https://studentloans.example.org/ontology#hasPayment
+    type: direct
+    fk_table: sl_payments
+    fk_column: sl_loan_id
+    ref_table: sl_loans
+    ref_column: sl_loan_id
+  issuedBy:
+    iri: https://studentloans.example.org/ontology#issuedBy
+    type: direct
+    fk_table: sl_loans
+    fk_column: sl_lender_id
+    ref_table: sl_lenders
+    ref_column: sl_lender_id
+

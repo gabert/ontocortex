@@ -1,0 +1,84 @@
+=== INTEREST RATES ===
+
+Base annual rates by loan type:
+- Federal Subsidized: 5.53% -- undergraduate, need-based
+- Federal Unsubsidized: 5.53% -- undergraduate, no need requirement
+- Federal PLUS: 8.08% -- parent PLUS / grad PLUS
+- Refinanced: 6.99% -- refinanced through a private lender
+- Private: 9.95% -- private market, varies by credit
+
+These are defaults for new loans. A loan may carry a different rate if
+originated under a promotional program.
+
+
+=== AUTOPAY DISCOUNT ===
+
+Enrolling in autopay reduces the interest rate by 0.25 percentage points
+for all loan types, for as long as autopay remains active. If the borrower
+cancels autopay, the rate reverts to the base rate immediately.
+
+
+=== PAYMENT ALLOCATION ===
+
+When a payment is received, apply in this order:
+1. Pay down all accrued interest first
+2. Remaining amount reduces the principal balance
+
+Interest is charged daily at (annual_rate / 365) * current_balance.
+interest_portion + principal_portion must always equal the payment amount.
+
+
+=== GRACE PERIOD ===
+
+After graduation or dropping below half-time enrollment, federal loans
+enter a grace period before repayment begins:
+- Federal Subsidized: 6 months (no interest accrual during grace)
+- Federal Unsubsidized: 6 months (interest accrues normally)
+- Federal PLUS: no grace -- repayment begins at disbursement
+- Private: no grace (varies by lender; assume none)
+- Refinanced: no grace
+
+During grace, loan status is 'in_grace'. Once grace ends, status
+transitions to 'in_repayment'.
+
+
+=== COSIGNER REQUIREMENTS ===
+
+Cosigners are required for private loans and recommended for refinanced
+loans.
+
+Cosigner release eligibility: after 24 consecutive on-time payments, the
+borrower may apply to release the cosigner. Release requires the borrower
+to meet credit and income criteria on their own.
+
+
+=== HARDSHIP OPTIONS ===
+
+Deferment:
+- Maximum: 36 months
+- Eligibility: federal loans only (unemployment or economic hardship)
+- Interest accrual: only unsubsidized federal loans accrue interest
+
+Forbearance:
+- Maximum: 12 months
+- Eligibility: all loan types (discretionary hardship -- medical, short-term)
+- Interest accrual: all loans accrue interest
+
+Deferment and forbearance pause required payments. Use deferment first if
+the borrower is eligible -- it is cheaper.
+
+
+=== DEFAULT TIMELINE ===
+
+- Delinquent: after 90 days of missed payments
+- Default: after 270 days of non-payment
+
+Defaulted federal loans may be subject to wage garnishment and tax-refund
+offset. Defaulted private loans go to collections and damage the borrower's
+credit severely.
+
+
+=== PREPAYMENT ===
+
+All loan types allow prepayment without penalty. Extra payments apply to
+principal after covering accrued interest.

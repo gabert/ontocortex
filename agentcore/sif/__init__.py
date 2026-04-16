@@ -11,6 +11,7 @@ the same contract: translate a validated SIF op into a backend plan,
 then execute it against a connection.
 """
 
+from agentcore.sif.mapping import build_schema_map_from_mapping, generate_mapping_from_schema
 from agentcore.sif.schema_map import JoinStep, RelationMap, SchemaMap, TableMap
 from agentcore.sif.tool import build_sif_tool
 from agentcore.sif.types import LinkPlan, TranslationError
@@ -23,6 +24,8 @@ __all__ = [
     "SchemaMap",
     "TableMap",
     "TranslationError",
+    "build_schema_map_from_mapping",
     "build_sif_tool",
+    "generate_mapping_from_schema",
     "validate_operations",
 ]

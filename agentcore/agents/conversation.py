@@ -15,11 +15,10 @@ from typing import Callable
 from anthropic import Anthropic
 
 from agentcore.agents.base import BaseAgent
+from agentcore.config import ChatConfig
 from agentcore.domain import DomainConfig
 
 ToolExecutor = Callable[[list[dict]], tuple[str, list[dict]]]
-
-_DEFAULT_MAX_ITERATIONS = 20
 
 _SYSTEM_TEMPLATE = """\
 {persona}
@@ -140,7 +139,7 @@ After the maximum of {max_iter} tool iterations you must respond with text.
 Never go silent. Always produce a final message for the user on every turn,
 even if you could not complete the request — explain what went wrong in
 plain language.
-"""
+{user_context}"""
 
 
 class ConversationAgent(BaseAgent):
@@ -151,14 +150,33 @@ class ConversationAgent(BaseAgent):
         client: Anthropic,
         domain: DomainConfig,
         sif_tool: dict,
+        model: str,
+        chat_cfg: ChatConfig,
         verbose: bool = True,
-        max_iterations: int = _DEFAULT_MAX_ITERATIONS,
     ) -> None:
-        super().__init__(client, verbose)
+        super().__init__(client, chat_cfg, verbose, model=model)
         self.domain = domain
         self.sif_tool = sif_tool
-        self.max_iterations = max_iterations
         self.messages: list[dict] = []
+        self._user_context: str = ""
+        self.system_prompt = self._build_system_prompt()
+
+    def set_user_context(self, user_data: dict | None) -> None:
+        """Set the logged-in user's profile and rebuild the system prompt.
+
+        Called when the application boundary establishes who the user is
+        (login, session restore, identity picker). The agent can then
+        greet the user by name and skip "who are you?" questions.
+        """
+        if user_data:
+            fields = ", ".join(f"{k}: {v}" for k, v in user_data.items() if v is not None)
+            self._user_context = (
+                "\n=== LOGGED-IN USER ===\n\n"
+                f"The current user is already authenticated. Their profile: {fields}\n"
+                "Greet them by name. Do not ask them to identify themselves."
+            )
+        else:
+            self._user_context = ""
         self.system_prompt = self._build_system_prompt()
 
     def _build_system_prompt(self) -> str:
@@ -167,7 +185,8 @@ class ConversationAgent(BaseAgent):
             persona=self.domain.prompt_text,
             ontology=ontology,
             rules=self.domain.rules_text,
-            max_iter=self.max_iterations,
+            max_iter=self.chat_cfg.max_iterations,
+            user_context=self._user_context,
         )
 
     def chat(
@@ -188,7 +207,7 @@ class ConversationAgent(BaseAgent):
         self.messages.append({"role": "user", "content": user_message})
         query_log: list[dict] = []
 
-        for _ in range(self.max_iterations):
+        for _ in range(self.chat_cfg.max_iterations):
             response = self._call_api(
                 self.system_prompt, self.messages, tools=[self.sif_tool],
             )
@@ -234,7 +253,7 @@ class ConversationAgent(BaseAgent):
         )
         self.messages.append({"role": "assistant", "content": fallback})
         if self.verbose:
-            print(f"    [CONVERSATION] iteration cap ({self.max_iterations}) hit")
+            print(f"    [CONVERSATION] iteration cap ({self.chat_cfg.max_iterations}) hit")
         return fallback, query_log
 
     def reset(self) -> None:

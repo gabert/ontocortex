@@ -18,7 +18,6 @@ from typing import Any
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
-_ANALYZER_MODEL = "claude-sonnet-4-5"
 _ANALYZER_SYSTEM = """\
 You are debugging a multi-turn conversation between a user, a Claude-based
 conversation agent, and a deterministic SIF-to-SQL pipeline.
@@ -105,6 +104,7 @@ def analyze_error(
     error: BaseException,
     messages: list[dict],
     query_log: list[dict],
+    llm_model: str,
 ) -> Path | None:
     """Send the conversation context + error to Claude for a post-mortem.
 
@@ -127,7 +127,7 @@ def analyze_error(
             + "\n```"
         )
         resp = client.messages.create(
-            model=_ANALYZER_MODEL,
+            model=llm_model,
             max_tokens=2048,
             system=_ANALYZER_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
